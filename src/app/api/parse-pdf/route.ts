@@ -21,6 +21,12 @@ export async function POST(request: NextRequest) {
 
   const pdfBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
 
+  // IMPORTANT: these reports render some fields (e.g. the UID) as graphics/vector
+  // art with no corresponding text-layer content — a text-extraction pass over
+  // the PDF misses them entirely. `type: "document"` makes Claude read the PDF
+  // via vision (each page as an image), not just its text layer; the prompt
+  // below reinforces that explicitly. Do not swap this for a text-only
+  // extraction path (e.g. pdf-parse/pdfplumber piped into a plain text prompt).
   const message = await anthropic.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 16000,
@@ -38,11 +44,11 @@ export async function POST(request: NextRequest) {
           },
           {
             type: "text",
-            text: `Extract the data from this genomic report PDF as JSON matching this schema:\n\n${JSON.stringify(
+            text: `Visually inspect every page of this genomic report PDF as an image — do not rely on any embedded/extracted text layer alone, since some fields are rendered graphically and have no text-layer equivalent. Extract the data as JSON matching this schema:\n\n${JSON.stringify(
               REPORT_JSON_SCHEMA,
               null,
               2
-            )}\n\nThe "uid" field is a standalone "UID - <value>" line on page 1, directly below the Name/Age/Gender row. It is a different field from "Genomic Specimen ID" under Sample Details (which is often blank) — do not confuse them.\n\nRespond with ONLY the JSON object, no other text.`,
+            )}\n\nThe "uid" field is a standalone "UID - <value>" line on page 1, directly below the Name/Age/Gender row, visible only in the rendered page image. It is a different field from "Genomic Specimen ID" under Sample Details (which is often blank) — do not confuse them.\n\nRespond with ONLY the JSON object, no other text.`,
           },
         ],
       },
