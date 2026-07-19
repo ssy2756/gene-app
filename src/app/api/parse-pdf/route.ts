@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "@/lib/db";
 import { sessionCookieName, verifySessionToken } from "@/lib/auth";
-import { REPORT_JSON_SCHEMA } from "@/lib/report-schema";
+import { REPORT_JSON_SCHEMA, reportDataSchema } from "@/lib/report-schema";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 4096,
+    max_tokens: 16000,
     messages: [
       {
         role: "user",
@@ -38,11 +38,11 @@ export async function POST(request: NextRequest) {
           },
           {
             type: "text",
-            text: `Extract the data from this PDF report as JSON matching this schema:\n\n${JSON.stringify(
+            text: `Extract the data from this genomic report PDF as JSON matching this schema:\n\n${JSON.stringify(
               REPORT_JSON_SCHEMA,
               null,
               2
-            )}\n\nRespond with ONLY the JSON object, no other text.`,
+            )}\n\nThe "uid" field is a standalone "UID - <value>" line on page 1, directly below the Name/Age/Gender row. It is a different field from "Genomic Specimen ID" under Sample Details (which is often blank) — do not confuse them.\n\nRespond with ONLY the JSON object, no other text.`,
           },
         ],
       },
@@ -54,21 +54,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No text response from model" }, { status: 502 });
   }
 
-  let parsed: Record<string, unknown>;
+  let rawParsed: unknown;
   try {
-    parsed = JSON.parse(textBlock.text);
+    rawParsed = JSON.parse(textBlock.text);
   } catch {
     return NextResponse.json({ error: "Model did not return valid JSON" }, { status: 502 });
   }
 
-  const uid = parsed.uid;
-  if (typeof uid !== "string" || uid.length === 0) {
-    return NextResponse.json({ error: "Parsed JSON is missing a uid" }, { status: 422 });
+  const validation = reportDataSchema.safeParse(rawParsed);
+  if (!validation.success) {
+    return NextResponse.json(
+      { error: "Parsed JSON failed validation", issues: validation.error.issues },
+      { status: 422 }
+    );
   }
+
+  const { uid, ...data } = validation.data;
 
   await sql`
     INSERT INTO reports (uid, data, updated_at)
-    VALUES (${uid}, ${JSON.stringify(parsed)}::jsonb, now())
+    VALUES (${uid}, ${JSON.stringify(data)}::jsonb, now())
     ON CONFLICT (uid) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
   `;
 
