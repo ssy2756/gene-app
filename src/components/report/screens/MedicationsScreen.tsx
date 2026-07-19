@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { DisplayReport } from "@/lib/report-mapping";
+import { ChevronRightIcon, SearchIcon } from "../Icons";
 
 export function MedicationsScreen({
   report,
@@ -43,7 +44,8 @@ export function MedicationsScreen({
           </div>
         )}
 
-        <div className="mt-3 flex items-center gap-2 rounded-2xl border border-[#ece7f2] bg-white px-3.5 py-2.5">
+        <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-[#ece7f2] bg-white px-3.5 py-2.5">
+          <SearchIcon />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -77,6 +79,7 @@ export function MedicationsScreen({
             <div className="text-[13.5px] font-semibold">View diplotype panel</div>
             <div className="mt-0.5 text-[11px] text-[#8a819c]">Your raw gene test results</div>
           </div>
+          <ChevronRightIcon />
         </button>
       </div>
 

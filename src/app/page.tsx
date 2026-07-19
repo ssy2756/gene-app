@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Image from "next/image";
 import type { DisplayReport } from "@/lib/report-mapping";
 import { ReportApp } from "@/components/report/ReportApp";
@@ -11,25 +11,29 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const loadReport = useCallback(async (lookupUid: string) => {
+    const res = await fetch(`/api/reports/${encodeURIComponent(lookupUid)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Could not find report");
+      return;
+    }
+    setError(null);
+    setReport(data);
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/reports/${encodeURIComponent(uid)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Could not find report");
-        return;
-      }
-      setReport(data);
+      await loadReport(uid);
     } finally {
       setLoading(false);
     }
   }
 
   if (report) {
-    return <ReportApp report={report} onLogout={() => setReport(null)} />;
+    return <ReportApp report={report} onLogout={() => setReport(null)} onLoadUid={loadReport} />;
   }
 
   return (

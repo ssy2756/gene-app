@@ -1,12 +1,12 @@
 {
-  "name": "Gene App",
-  "short_name": "GeneApp",
-  "description": "Look up your report by UID",
+  "name": "GenepowerX",
+  "short_name": "GenepowerX",
+  "description": "Look up your genomic report by UID",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#f6f4f8",
+  "theme_color": "#3A2F88",
   "icons": [
     {
       "src": "/icons/icon-192.png",

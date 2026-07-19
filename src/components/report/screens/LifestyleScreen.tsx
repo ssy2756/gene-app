@@ -1,6 +1,7 @@
 "use client";
 
 import type { DisplayReport } from "@/lib/report-mapping";
+import { CheckIcon } from "../Icons";
 
 export function LifestyleScreen({ report }: { report: DisplayReport }) {
   const { vitamins, sensitivities, fitness } = report;
@@ -64,7 +65,7 @@ export function LifestyleScreen({ report }: { report: DisplayReport }) {
           <div className="mt-3.5 flex flex-col gap-2">
             {fitness.tips.map((f, i) => (
               <div key={i} className="flex items-start gap-2.5">
-                <span className="mt-0.5 text-[#2fb08c]">✓</span>
+                <CheckIcon />
                 <span className="text-[13px] leading-relaxed text-[#524a66]">{f}</span>
               </div>
             ))}

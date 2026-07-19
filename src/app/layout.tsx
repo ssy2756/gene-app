@@ -14,18 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gene App",
-  description: "Look up your report by UID",
+  title: "GenepowerX",
+  description: "Look up your genomic report by UID",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
-    title: "Gene App",
+    statusBarStyle: "black-translucent",
+    title: "GenepowerX",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#3A2F88",
 };
 
 export default function RootLayout({

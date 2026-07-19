@@ -1,23 +1,29 @@
 "use client";
 
 import type { DisplayReport } from "@/lib/report-mapping";
+import { TapDefine } from "../TapDefine";
+import { BackIcon, CheckIcon } from "../Icons";
 
 export function ConditionDetailScreen({
   report,
   condId,
   goBack,
+  glossaryTerms,
+  onDefine,
 }: {
   report: DisplayReport;
   condId: string | null;
   goBack: () => void;
+  glossaryTerms: string[];
+  onDefine: (term: string) => void;
 }) {
   const cond = report.conditions.find((c) => c.id === condId) ?? report.conditions[0];
 
   if (!cond) {
     return (
       <div className="px-5 pt-3">
-        <button onClick={goBack} className="text-sm font-semibold text-[#3A2F88]">
-          ← Health risks
+        <button onClick={goBack} className="flex items-center gap-1 text-sm font-semibold text-[#3A2F88]">
+          <BackIcon /> Health risks
         </button>
         <div className="mt-6 text-center text-[13px] text-[#9a8fb0]">No condition data available.</div>
       </div>
@@ -27,8 +33,8 @@ export function ConditionDetailScreen({
   return (
     <div className="pb-28">
       <div className="px-5 pb-2 pt-3">
-        <button onClick={goBack} className="text-sm font-semibold text-[#3A2F88]">
-          ← Health risks
+        <button onClick={goBack} className="flex items-center gap-1 text-sm font-semibold text-[#3A2F88]">
+          <BackIcon /> Health risks
         </button>
       </div>
 
@@ -62,14 +68,18 @@ export function ConditionDetailScreen({
         {cond.description && (
           <>
             <div className="mt-4 text-sm font-bold">In plain language</div>
-            <div className="mt-1.5 text-[13.5px] leading-relaxed text-[#524a66]">{cond.description}</div>
+            <div className="mt-1.5 text-[13.5px] leading-relaxed text-[#524a66]">
+              <TapDefine text={cond.description} terms={glossaryTerms} onDefine={onDefine} />
+            </div>
           </>
         )}
 
         {cond.narrative && (
           <>
             <div className="mt-4 text-sm font-bold">Your medical concerns answered</div>
-            <div className="mt-1.5 text-[13.5px] leading-relaxed text-[#524a66]">{cond.narrative}</div>
+            <div className="mt-1.5 text-[13.5px] leading-relaxed text-[#524a66]">
+              <TapDefine text={cond.narrative} terms={glossaryTerms} onDefine={onDefine} />
+            </div>
           </>
         )}
 
@@ -79,8 +89,10 @@ export function ConditionDetailScreen({
             <div className="mt-2 flex flex-col gap-2">
               {cond.recommendations.map((r, i) => (
                 <div key={i} className="flex items-start gap-2.5 rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
-                  <span className="mt-0.5 text-[#2fb08c]">✓</span>
-                  <div className="text-[13px] leading-relaxed text-[#524a66]">{r}</div>
+                  <CheckIcon />
+                  <div className="text-[13px] leading-relaxed text-[#524a66]">
+                    <TapDefine text={r} terms={glossaryTerms} onDefine={onDefine} />
+                  </div>
                 </div>
               ))}
             </div>
