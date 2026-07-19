@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   // extraction path (e.g. pdf-parse/pdfplumber piped into a plain text prompt).
   const message = await anthropic.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 16000,
+    max_tokens: 32000,
     messages: [
       {
         role: "user",
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
           },
           {
             type: "text",
-            text: `Visually inspect every page of this genomic report PDF as an image — do not rely on any embedded/extracted text layer alone, since some fields are rendered graphically and have no text-layer equivalent. Extract the data as JSON matching this schema:\n\n${JSON.stringify(
+            text: `This is a multi-page genomic report PDF (commonly 60-90+ pages). Visually inspect EVERY SINGLE PAGE, from the first page to the last, as an image — do not rely on any embedded/extracted text layer alone, since some fields are rendered graphically and have no text-layer equivalent, and do not stop scanning after the first few pages. Every section of the schema below (condition_risk_overview, medical_recommendations, immune_health, hereditary_cancer_screening, fitness_and_nutrigenomics, vitamins_and_minerals, methylation, pharmacogenomics, diet_plan, appendix, etc.) lives on its own pages later in the document — go through the entire PDF page by page and populate each section from the pages where it actually appears, not just from page 1.\n\nExtract the data as JSON matching this schema:\n\n${JSON.stringify(
               REPORT_JSON_SCHEMA,
               null,
               2
