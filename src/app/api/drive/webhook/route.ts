@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   }
 
   const { changes, newPageToken } = await listPdfChangesSince(state.page_token);
+  console.log(`[drive/webhook] found ${changes.length} pending PDF change(s):`, changes.map((c) => c.name));
 
   const results: { fileId: string; name: string; uid?: string; error?: string }[] = [];
 
@@ -39,9 +40,13 @@ export async function POST(request: Request) {
     const alreadyProcessed = await sql`
       SELECT 1 FROM processed_drive_files WHERE drive_file_id = ${change.fileId}
     `;
-    if (alreadyProcessed.length > 0) continue;
+    if (alreadyProcessed.length > 0) {
+      console.log(`[drive/webhook] skipping already-processed file: ${change.name}`);
+      continue;
+    }
 
     try {
+      console.log(`[drive/webhook] downloading and ingesting: ${change.name}`);
       const buffer = await downloadFile(change.fileId);
       const { uid } = await ingestReportPdf(buffer);
       await sql`
@@ -49,14 +54,33 @@ export async function POST(request: Request) {
         VALUES (${change.fileId}, ${uid})
         ON CONFLICT (drive_file_id) DO NOTHING
       `;
+      console.log(`[drive/webhook] ingested ${change.name} -> uid ${uid}`);
       results.push({ fileId: change.fileId, name: change.name, uid });
     } catch (err) {
+      // Log server-side unconditionally — this is the only place we'd ever
+      // see the failure, since the HTTP response goes back to Google, not us.
+      console.error(`[drive/webhook] failed to ingest ${change.name}:`, err);
       const message = err instanceof IngestError ? err.message : "Unknown error";
       results.push({ fileId: change.fileId, name: change.name, error: message });
     }
   }
 
-  await sql`UPDATE drive_sync_state SET page_token = ${newPageToken}, updated_at = now() WHERE id = TRUE`;
+  // Multiple overlapping channels (e.g. a stale one not yet expired after a
+  // re-registration) can deliver duplicate/concurrent notifications for the
+  // same underlying change. Drive's page tokens are, in practice, increasing
+  // decimal strings — guard against an in-flight older request clobbering a
+  // newer token a concurrent request already wrote. Falls back to a plain
+  // overwrite if either token isn't purely numeric.
+  const isNumeric = (s: string) => /^\d+$/.test(s);
+  if (isNumeric(state.page_token) && isNumeric(newPageToken)) {
+    await sql`
+      UPDATE drive_sync_state
+      SET page_token = ${newPageToken}, updated_at = now()
+      WHERE id = TRUE AND page_token::bigint < ${newPageToken}::bigint
+    `;
+  } else {
+    await sql`UPDATE drive_sync_state SET page_token = ${newPageToken}, updated_at = now() WHERE id = TRUE`;
+  }
 
   return NextResponse.json({ processed: results });
 }
