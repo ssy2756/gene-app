@@ -104,6 +104,12 @@ export async function watchChanges(
 ): Promise<{ channelId: string; resourceId: string; expiration: string }> {
   const drive = getDriveClient();
   const channelId = crypto.randomUUID();
+  // Without an explicit `expiration`, Google defaults new channels to just
+  // 1 hour — far too short for a daily renewal cron to keep up with. Request
+  // the longest Google allows (currently up to 24h for this API); Google
+  // clamps it server-side and returns the real granted value, which we read
+  // back from res.data.expiration below.
+  const requestedExpiration = String(Date.now() + 24 * 60 * 60 * 1000);
   const res = await drive.changes.watch({
     pageToken,
     requestBody: {
@@ -111,6 +117,7 @@ export async function watchChanges(
       type: "web_hook",
       address: webhookUrl,
       token: channelToken,
+      expiration: requestedExpiration,
     },
   });
   if (!res.data.resourceId || !res.data.expiration) {
