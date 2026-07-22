@@ -2,7 +2,16 @@ import OpenAI from "openai";
 import { sql } from "@/lib/db";
 import { REPORT_JSON_SCHEMA, reportDataSchema } from "@/lib/report-schema";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazily constructed on first use, not at module load: the OpenAI SDK throws
+// immediately if no API key is available, and Next.js evaluates route
+// modules during its build-time "collect page data" step even for dynamic
+// routes — throwing at import time would fail the build itself whenever
+// OPENAI_API_KEY isn't set yet (e.g. before it's added in Vercel).
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return openaiClient;
+}
 
 // Vision-capable, PDF-file-input-capable model. Override via env if a newer
 // model should be used without a code change.
@@ -34,7 +43,7 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
   // just its text layer; the prompt below reinforces that explicitly. Do not
   // swap this for a text-only extraction path (e.g. pdf-parse/pdfplumber piped
   // into a plain text prompt).
-  const response = await openai.responses.create({
+  const response = await getOpenAI().responses.create({
     model: MODEL,
     // gpt-4o's output cap is 16384 tokens; raise this if OPENAI_MODEL is
     // swapped for a model with a larger output limit.
