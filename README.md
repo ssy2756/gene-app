@@ -1,6 +1,6 @@
 # GenepowerX report app
 
-PWA that parses genomic report PDFs (via the Anthropic API, vision-based) into structured JSON, stores them in Neon Postgres, and lets users look up their report by UID. PDFs arrive automatically via a Google Drive drop folder (staff upload there, not through the app) rather than manual upload, though a manual upload sheet also exists as an admin fallback.
+PWA that parses genomic report PDFs (via the OpenAI API, vision-based) into structured JSON, stores them in Neon Postgres, and lets users look up their report by UID. PDFs arrive automatically via a Google Drive drop folder (staff upload there, not through the app) rather than manual upload, though a manual upload sheet also exists as an admin fallback.
 
 ## Status
 
@@ -9,14 +9,14 @@ Core app (auth, PDF parsing, UID lookup, full UI) is built. Still needed to go l
 1. **Deploy to Vercel + connect Neon**, run `db/schema.sql`, set env vars.
 2. **A seeded user** — there's no signup flow by design (users are provisioned, not self-registered); insert a row into `users` manually (see below).
 3. **Google Cloud project + service account** for the Drive ingestion pipeline (see "Google Drive setup" below) — required before PDFs dropped in Drive can be auto-parsed.
-4. **An Anthropic API key.**
+4. **An OpenAI API key.**
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env.local
-# fill in DATABASE_URL (Neon), ANTHROPIC_API_KEY, SESSION_SECRET
+# fill in DATABASE_URL (Neon), OPENAI_API_KEY, SESSION_SECRET
 ```
 
 Apply the schema to your Neon database:
@@ -40,7 +40,7 @@ npm run dev
 
 ## Architecture
 
-- `src/lib/ingest-report.ts` — the single place that turns a PDF buffer into a stored report: sends it to Claude as a vision `document` block (see the comment there and in `AGENTS.md` — full-document scan, never a text-only extraction path), validates against `reportDataSchema` (`src/lib/report-schema.ts`), upserts into `reports` keyed by `uid`.
+- `src/lib/ingest-report.ts` — the single place that turns a PDF buffer into a stored report: sends it to OpenAI (`gpt-4o` by default, override via `OPENAI_MODEL`) as a vision `input_file` (see the comment there and in `AGENTS.md` — full-document scan, never a text-only extraction path), validates against `reportDataSchema` (`src/lib/report-schema.ts`), upserts into `reports` keyed by `uid`.
 - `src/app/api/parse-pdf` — manual upload path (admin fallback / in-app Upload sheet), calls `ingestReportPdf`.
 - `src/app/api/drive/webhook` + `src/app/api/drive/register-watch` — the primary ingestion path: Google Drive push notifications trigger parsing automatically when staff drop a PDF into a shared folder. See "Google Drive setup" below.
 - `scripts/poll-drive.ts` (`npm run poll-drive`) — local-testing alternative to the webhook (no public URL needed): lists PDFs in the target folder and ingests anything new.

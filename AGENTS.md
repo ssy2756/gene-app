@@ -6,8 +6,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # PDF parsing must always use vision, across the ENTIRE document
 
-The source reports (see `src/app/api/parse-pdf/route.ts`) render some fields — notably the `uid` — as graphics/vector art with no text-layer equivalent (e.g. the "UID - <value>" line on page 1, directly under Name/Age/Gender). A text-extraction-only pass over the PDF misses these fields entirely.
+The source reports (see `src/lib/ingest-report.ts`) render some fields — notably the `uid` — as graphics/vector art with no text-layer equivalent (e.g. the "UID - <value>" line on page 1, directly under Name/Age/Gender). A text-extraction-only pass over the PDF misses these fields entirely.
 
-Always send the PDF to Claude as a `document` content block (vision-based page reading), never swap it for a text-only extraction pipeline (pdf-parse, pdfplumber, etc. piped into a plain-text prompt).
+Always send the PDF to the model as an `input_file` (OpenAI Responses API — vision-based page reading, each page rendered as an image internally), never swap it for a text-only extraction pipeline (pdf-parse, pdfplumber, etc. piped into a plain-text prompt).
+
+Parsing runs on OpenAI (`OPENAI_API_KEY`, model configurable via `OPENAI_MODEL`, default `gpt-4o`) — not Anthropic/Claude, despite this file's history.
 
 These reports run 60-90+ pages, and each schema section (condition_risk_overview, medical_recommendations, pharmacogenomics, diet_plan, appendix, etc.) lives on its own pages well past page 1. The prompt must explicitly instruct the model to visually scan every page from first to last and populate each section from wherever it actually appears in the document — not just skim the first few pages. If extraction results ever look thin (e.g. missing sections that should be populated), suspect under-scanning before suspecting the schema.
