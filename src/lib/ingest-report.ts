@@ -48,6 +48,11 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
     // gpt-4o's output cap is 16384 tokens; raise this if OPENAI_MODEL is
     // swapped for a model with a larger output limit.
     max_output_tokens: 16000,
+    // Forces valid JSON output. Without this, smaller models (e.g.
+    // gpt-4o-mini) sometimes wrap the JSON in markdown code fences or add
+    // stray prose despite the prompt saying not to — this makes it a hard
+    // API-level guarantee instead of a request.
+    text: { format: { type: "json_object" } },
     input: [
       {
         role: "user",
@@ -79,7 +84,23 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
   try {
     rawParsed = JSON.parse(text);
   } catch {
-    throw new IngestError("Model did not return valid JSON", 502);
+    // Defense in depth on top of the json_object response format above:
+    // strip markdown code fences some models still add, and fall back to
+    // the largest {...} substring if there's stray prose around the JSON.
+    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    try {
+      rawParsed = JSON.parse(stripped);
+    } catch {
+      const match = stripped.match(/\{[\s\S]*\}/);
+      if (!match) {
+        throw new IngestError("Model did not return valid JSON", 502);
+      }
+      try {
+        rawParsed = JSON.parse(match[0]);
+      } catch {
+        throw new IngestError("Model did not return valid JSON", 502);
+      }
+    }
   }
 
   const validation = reportDataSchema.safeParse(rawParsed);
