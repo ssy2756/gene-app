@@ -310,25 +310,32 @@ function mapVitaminItem(v: unknown): { name: string; why: string; dose: string }
   };
 }
 
+// Groups a flat array of vitamin items by each item's own "tier" field
+// (falling back to "General" for items with no tier of their own).
+function groupByOwnTier(items: unknown[]): VitaminTierView[] {
+  const groups = new Map<string, { name: string; why: string; dose: string }[]>();
+  for (const v of items) {
+    const tier = str(pick(v, ["tier"]), "General");
+    const list = groups.get(tier) ?? [];
+    list.push(mapVitaminItem(v));
+    groups.set(tier, list);
+  }
+  return [...groups.entries()].map(([tier, tierItems]) => ({ tier, color: tierColor(tier), items: tierItems }));
+}
+
 function mapVitamins(raw: RawReport): VitaminTierView[] {
   const vm = raw.vitamins_and_minerals;
   if (Array.isArray(vm)) {
-    const groups = new Map<string, { name: string; why: string; dose: string }[]>();
-    for (const v of vm) {
-      const tier = str(pick(v, ["tier"]), "General");
-      const list = groups.get(tier) ?? [];
-      list.push(mapVitaminItem(v));
-      groups.set(tier, list);
-    }
-    return [...groups.entries()].map(([tier, items]) => ({ tier, color: tierColor(tier), items }));
+    return groupByOwnTier(vm);
   }
   if (isRecord(vm)) {
-    // A generic "items"/"list" key means an untiered flat list, not a real
-    // tier name — group those under "General" instead of a tier literally
-    // called "Items".
+    // A generic "items"/"list" key means the array is wrapped in a single
+    // envelope object rather than keyed by tier — group those by each
+    // item's own "tier" field, same as the flat-array case, rather than
+    // treating the wrapper key itself as a (wrong) single tier name.
     const genericKey = ["items", "list", "vitamins", "nutrients"].find((k) => Array.isArray(vm[k]));
     if (genericKey) {
-      return [{ tier: "General", color: tierColor("General"), items: (vm[genericKey] as unknown[]).map(mapVitaminItem) }];
+      return groupByOwnTier(vm[genericKey] as unknown[]);
     }
     return Object.entries(vm)
       .filter(([, v]) => Array.isArray(v))
