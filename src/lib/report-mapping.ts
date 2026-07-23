@@ -387,9 +387,11 @@ function mapSensitivities(raw: RawReport): SensitivityView[] {
 function mapFitness(raw: RawReport): { headline: string; sub: string; tips: string[] } {
   const fn = raw.fitness_and_nutrigenomics;
   const musculo = isRecord(fn) ? fn.musculoskeletal : undefined;
-  const metabolism = asArray(isRecord(fn) ? fn.metabolism : undefined).filter(isRecord);
+  // "exercise" is the current schema field name; "metabolism" is kept as a
+  // fallback alias for any report ingested before the rename.
+  const exercise = asArray(isRecord(fn) ? (fn.exercise ?? fn.metabolism) : undefined).filter(isRecord);
   const musculoTips = flattenRecommendations(isRecord(musculo) ? musculo.recommendations : undefined);
-  const metabolismTips = metabolism.flatMap((m) => {
+  const exerciseTips = exercise.flatMap((m) => {
     const own = flattenRecommendations(m.recommendations);
     if (own.length) return own;
     // Fall back to the item's own narrative/type if it has no
@@ -405,7 +407,7 @@ function mapFitness(raw: RawReport): { headline: string; sub: string; tips: stri
   return {
     headline: str(pick(musculo, ["profile", "type"]), risk || "Fitness profile"),
     sub: narrative,
-    tips: [...musculoTips, ...metabolismTips],
+    tips: [...musculoTips, ...exerciseTips],
   };
 }
 

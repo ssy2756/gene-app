@@ -88,9 +88,10 @@ export const REPORT_JSON_SCHEMA = {
     fitness_and_nutrigenomics: {
       type: "object",
       properties: {
-        metabolism: {
+        exercise: {
           type: "array",
-          description: "Every fitness/exercise recommendation sentence found on the fitness pages.",
+          description:
+            "Every bullet point, verbatim, from the 'Exercise' subsection of the 'Tailored Fitness: Musculoskeletal Resilience for Every Step' page — transcribed exactly as printed, not summarized, reworded, or interpreted.",
           items: {
             type: "object",
             properties: { recommendation: { type: "string" } },
