@@ -45,6 +45,7 @@ export const GENE_REPORT_SCHEMA = {
     },
     condition_risk_overview: {
       type: "array",
+      description: "One entry per condition covered by the report — every condition analyzed must appear here.",
       items: {
         type: "object",
         properties: {
@@ -54,15 +55,27 @@ export const GENE_REPORT_SCHEMA = {
           description: { type: "string" },
           body_system: {
             type: "string",
+            enum: [
+              "Cardiovascular",
+              "Endocrine",
+              "Neurological",
+              "Metabolic",
+              "Gastrointestinal",
+              "Ophthalmic",
+              "Musculoskeletal",
+              "Immune",
+              "Other",
+            ],
             description:
-              "The report does not print a body system per condition — classify it yourself using standard medical knowledge (e.g. Cardiovascular, Endocrine, Neurological, Ophthalmic, Metabolic, Gastrointestinal, etc.).",
+              "The report does not print a body system per condition — classify it yourself using standard medical knowledge, choosing the single best-fitting value from the enum list.",
           },
         },
-        required: ["condition"],
+        required: ["condition", "body_system"],
       },
     },
     medical_recommendations: {
       type: "array",
+      description: "One entry per condition, matching condition_risk_overview by the same condition name.",
       items: {
         type: "object",
         properties: {
@@ -72,16 +85,16 @@ export const GENE_REPORT_SCHEMA = {
           recommendations: { type: "array", items: { type: "string" } },
           body_system: {
             type: "string",
-            description: "Same body-system classification as condition_risk_overview for this same condition — keep it consistent across both.",
+            description: "The exact same body_system value you gave this same condition in condition_risk_overview — must match, not be re-derived independently.",
           },
         },
-        required: ["condition"],
+        required: ["condition", "body_system"],
       },
     },
     care_plan: {
       type: "array",
       description:
-        "care_plan is NOT a section printed in the report — synthesize it yourself from the 'monitor X every Y' style monitoring/follow-up actions already present in medical_recommendations (and elsewhere in the extracted data). Deduplicate repeated actions that appear across multiple conditions (e.g. the same lab test recommended for two different conditions should appear once, not twice).",
+        "care_plan is NOT a section printed in the report — synthesize it yourself from the 'monitor X every Y' style monitoring/follow-up actions already present in medical_recommendations (and elsewhere in the extracted data). Deduplicate repeated actions that appear across multiple conditions (e.g. the same lab test recommended for two different conditions should appear once, not twice). This field must be populated whenever medical_recommendations contains any monitoring-style action — do not leave it empty if such actions exist.",
       items: {
         type: "object",
         properties: {
@@ -92,39 +105,23 @@ export const GENE_REPORT_SCHEMA = {
         required: ["action"],
       },
     },
-    immune_health: {
-      type: "object",
-      properties: {
-        narrative: { type: "string" },
-        test_result: { type: "string" },
-        variants: { type: "array", items: { type: "object" } },
-        clinical_recommendations: { type: "array", items: { type: "string" } },
-      },
-    },
-    hereditary_cancer_screening: {
-      type: "object",
-      properties: {
-        test_result: { type: "string" },
-        recommendations: { type: "array", items: { type: "string" } },
-        biomarkers_evaluated: { type: "array", items: { type: "string" } },
-      },
-    },
     fitness_and_nutrigenomics: {
       type: "object",
       properties: {
         exercise: {
           type: "array",
           description:
-            "Every bullet point, verbatim, from the 'Exercise' subsection of the 'Tailored Fitness: Musculoskeletal Resilience for Every Step' page — transcribed exactly as printed, not summarized, reworded, or interpreted.",
+            "Every bullet point, verbatim, from ONLY the 'Exercise' subsection of the 'Tailored Fitness: Musculoskeletal Resilience for Every Step' page. Do NOT pull content from 'Medical Recommendations', 'Diet and Nutrition', or the separate 'Your Metabolism' section — those are different sections and do not belong here. Transcribe exactly as printed, not summarized, reworded, or interpreted. The field name is 'exercise' — do not emit the old name 'metabolism' instead.",
           items: {
             type: "object",
             properties: { recommendation: { type: "string" } },
+            required: ["recommendation"],
           },
         },
         food_sensitivity: {
           type: "array",
           description:
-            "Every food/substance sensitivity listed (e.g. lactose, caffeine, gluten, insulin resistance). Source: the document's 'Your Metabolism' (or similarly named) section. This section reliably exists in these reports — this field must always be populated, never left empty, when it does.",
+            "Every food/substance sensitivity listed (e.g. lactose, caffeine, gluten, insulin resistance). Source: the document's 'Your Metabolism' section specifically (this is a different section from the Exercise subsection above — do not confuse the two). This section reliably exists in these reports — this field must always be populated, never left empty, when it does.",
           items: {
             type: "object",
             properties: {
@@ -132,6 +129,7 @@ export const GENE_REPORT_SCHEMA = {
               gene: { type: "string" },
               level: { type: "string" },
             },
+            required: ["name"],
           },
         },
         musculoskeletal: {
@@ -144,33 +142,23 @@ export const GENE_REPORT_SCHEMA = {
       },
     },
     vitamins_and_minerals: {
-      type: "object",
+      type: "array",
       description:
-        "Every INDIVIDUAL vitamin/mineral/nutrient recommendation on the vitamins & minerals pages, as a line-item list — NOT a paragraph summary. A single 'summary' string is not an acceptable substitute even if the page also contains introductory prose; extract the itemized data underneath it. Either shape is acceptable: a flat array of {name, tier, why, dose} objects (property name e.g. \"items\"), or an object keyed by tier whose values are arrays of {name, why, dose} objects — use whichever shape matches how the document itself groups them. Tier names (if any) must be the literal label printed on the page for each item, verified visually — do not assume a fixed 'Essential/Advised/Optional' scheme; many documents use different tier names or no tiers at all. Every named vitamin/mineral/nutrient on the page MUST appear as its own object with at least a name and dose.",
-    },
-    methylation: {
-      type: "object",
-      properties: {
-        markers: { type: "array", items: { type: "object" } },
-        recommendations: { type: "array", items: { type: "string" } },
-      },
-    },
-    diet_plan: { type: "array", items: { type: "object" } },
-    appendix: {
-      type: "object",
-      properties: {
-        glossary: { type: "object" },
-        acmg_reference: {
-          type: "string",
-          description: "Static boilerplate reference text (e.g. ACMG classification note) — copy verbatim if present, do not summarize.",
+        "Every INDIVIDUAL vitamin/mineral/nutrient recommendation on the 'Vitamins and Minerals Summary' page, as a flat line-item list — NOT a paragraph summary, and NOT grouped by tier into nested objects. Each item's 'tier' must be the literal section label printed above/around it on the page (typically 'Essential', 'Advised', or 'Optional'), verified visually against the actual page layout — do not infer tier from list position or from what seems typical; some tiers may have zero items and that is expected, do not invent items to fill an empty tier.",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          tier: { type: "string", description: "The literal tier label printed on the page for this specific item, e.g. 'Essential', 'Advised', or 'Optional'." },
+          why: { type: "string" },
+          dose: { type: "string" },
         },
-        biomarkers_by_condition: { type: "object" },
-        references: { type: "array", items: { type: "object" } },
+        required: ["name", "tier"],
       },
     },
   },
   required: ["uid", "patient_information"],
-  additionalProperties: true,
+  additionalProperties: false,
 } as const;
 
 // Extracted in its own call — see GENE_REPORT_SCHEMA's header comment for

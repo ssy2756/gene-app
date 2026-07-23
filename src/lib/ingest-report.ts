@@ -54,17 +54,24 @@ function logInvalidJson(label: string, response: Response, text: string) {
 // a plain-JSON-only instruction to satisfy the json_object response mode.
 const GENE_REPORT_PROMPT_BASE =
   "Extract all data from this GenepoweRx genetic report PDF into the record_gene_report tool " +
-  "call, following the field names in the tool schema exactly (snake_case, matching " +
-  "genepowerx_report_extracted.json). Do NOT include the pharmacogenomics section — that is " +
-  "extracted separately. The uid is the Genomic Specimen ID printed on the report; if it is " +
-  "blank, use the patient name alone (do not invent a placeholder for a missing collection " +
-  "date). Preserve every condition, risk level, gene, and recommendation you find — do not " +
-  "summarize or drop rows. Do not fabricate the appendix/glossary reference tables — omit them " +
-  "if not asked. The report does not print a body system per condition, so classify each " +
-  "condition's body_system yourself using standard medical knowledge. care_plan is not a " +
-  "section of the report — synthesize it from the 'monitor X every Y' style actions already " +
-  "present in medical_recommendations and elsewhere, deduplicating repeated actions across " +
-  "conditions.";
+  "call, following the field names in the tool schema exactly. Do NOT include the " +
+  "pharmacogenomics section — that is extracted separately. The uid is the Genomic Specimen ID " +
+  "printed on the report; if it is blank, use the patient name alone (do not invent a " +
+  "placeholder for a missing collection date). Preserve every condition, risk level, gene, and " +
+  "recommendation you find — do not summarize or drop rows. The report does not print a body " +
+  "system per condition, so classify each condition's body_system yourself using standard " +
+  "medical knowledge, from the enum given in the schema. care_plan is not a section of the " +
+  "report — synthesize it from the 'monitor X every Y' style actions already present in " +
+  "medical_recommendations and elsewhere, deduplicating repeated actions across conditions. " +
+  "For the Lifestyle section: 'exercise' must come ONLY from the 'Exercise' subsection of the " +
+  "'Tailored Fitness: Musculoskeletal Resilience for Every Step' page — never from 'Medical " +
+  "Recommendations' or 'Diet and Nutrition'. 'food_sensitivity' must come from the separate " +
+  "'Your Metabolism' section — this is a different section from Exercise, do not confuse them, " +
+  "and food_sensitivity must not be left empty if that section exists. For " +
+  "'vitamins_and_minerals': extract the itemized list under the 'Vitamins and Minerals " +
+  "Summary' page as individual items, each with the tier label exactly as printed and verified " +
+  "visually against the page layout — do not assign tiers by list position or by what tier " +
+  "seems typical, and do not invent items for a tier that is empty on the page.";
 
 const PHARMACOGENOMICS_PROMPT_BASE =
   "This report has a large Pharmacogenomics (PGx) section spanning many pages: a gene " +
