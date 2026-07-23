@@ -31,10 +31,31 @@ class NodeCanvasFactory {
   }
 }
 
+// How many pages to OCR concurrently. Reports run 60-90+ pages; OCR-ing
+// them one at a time risks exceeding the route's maxDuration (300s) long
+// before we're done. Rendering is CPU-bound and each page is independent,
+// so a small worker pool cuts wall-clock time roughly by this factor.
+const OCR_CONCURRENCY = 6;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function renderPageToPng(doc: any, pageNum: number): Promise<Buffer> {
+  const canvasFactory = new NodeCanvasFactory();
+  const page = await doc.getPage(pageNum);
+  // 2x scale: PDF default is 72 DPI, this renders at ~144 DPI, which OCR
+  // needs for small body text to come out accurately.
+  const viewport = page.getViewport({ scale: 2.0 });
+  const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
+  await page.render({ canvasContext: context, viewport, canvasFactory }).promise;
+  const pngBuffer = canvas.toBuffer("image/png");
+  canvasFactory.destroy({ canvas, context });
+  return pngBuffer;
+}
+
 // Rasterizes every page of the PDF at a resolution high enough for OCR to
-// read normal body text reliably, then runs OCR on each page and
-// concatenates the results with page markers so the model can still
-// reason about document order/sections.
+// read normal body text reliably, then runs OCR on each page (via a small
+// pool of workers, in parallel) and concatenates the results in original
+// page order with page markers so the model can still reason about
+// document order/sections.
 export async function extractPdfTextViaOcr(pdfBuffer: Buffer): Promise<string> {
   // pdfjs-dist v6 ships ESM-only (no CJS `pdf.js` build) — dynamic import
   // is required here. This is also the only rendering path that rasterizes
@@ -42,39 +63,31 @@ export async function extractPdfTextViaOcr(pdfBuffer: Buffer): Promise<string> {
   // as pure vector graphics — the exact problem that made this app switch
   // to vision-based extraction in the first place); OCR-ing the rendered
   // bitmap recovers that content as plain text instead.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBuffer) }).promise;
-  const canvasFactory = new NodeCanvasFactory();
+  const doc = await (pdfjs as any).getDocument({ data: new Uint8Array(pdfBuffer) }).promise;
+  const numPages: number = doc.numPages;
 
-  const worker = await createWorker("eng", 1, {
-    langPath: engTrainedData.langPath,
-    gzip: engTrainedData.gzip,
-    cachePath: "/tmp",
-  });
+  const workerOptions = { langPath: engTrainedData.langPath, gzip: engTrainedData.gzip, cachePath: "/tmp" };
+  const pool = await Promise.all(
+    Array.from({ length: Math.min(OCR_CONCURRENCY, numPages) }, () => createWorker("eng", 1, workerOptions))
+  );
+
   try {
-    const pageTexts: string[] = [];
-    for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-      const page = await doc.getPage(pageNum);
-      // 2x scale: PDF default is 72 DPI, this renders at ~144 DPI, which
-      // OCR needs for small body text to come out accurately.
-      const viewport = page.getViewport({ scale: 2.0 });
-      const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
-
-      await page.render({
-        canvasContext: context,
-        viewport,
-        canvasFactory,
-      }).promise;
-
-      const pngBuffer = canvas.toBuffer("image/png");
-      const { data } = await worker.recognize(pngBuffer);
-      pageTexts.push(`--- Page ${pageNum} ---\n${data.text.trim()}`);
-
-      canvasFactory.destroy({ canvas, context });
+    const pageTexts: string[] = new Array(numPages);
+    let nextPage = 1;
+    async function runWorker(worker: Awaited<ReturnType<typeof createWorker>>) {
+      while (nextPage <= numPages) {
+        const pageNum = nextPage++;
+        const pngBuffer = await renderPageToPng(doc, pageNum);
+        const { data } = await worker.recognize(pngBuffer);
+        pageTexts[pageNum - 1] = `--- Page ${pageNum} ---\n${data.text.trim()}`;
+      }
     }
+    await Promise.all(pool.map(runWorker));
     return pageTexts.join("\n\n");
   } finally {
-    await worker.terminate();
+    await Promise.all(pool.map((w) => w.terminate()));
+    await doc.destroy();
   }
 }

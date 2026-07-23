@@ -19,6 +19,22 @@ const nextConfig: NextConfig = {
       // constants/imageType. Include the whole package source tree.
       "./node_modules/tesseract.js/src/**",
       "./node_modules/@tesseract.js-data/eng/**",
+      // tesseract.js's own runtime dependencies (its worker script
+      // require()s these directly) — Next's tracer keeps missing pieces
+      // of this tree one at a time (bmp-js, then the next one), so list
+      // tesseract.js's full dependency set from its package.json instead
+      // of continuing to whack-a-mole individual missing files.
+      "./node_modules/bmp-js/**",
+      "./node_modules/idb-keyval/**",
+      "./node_modules/is-url/**",
+      "./node_modules/node-fetch/**",
+      "./node_modules/data-uri-to-buffer/**",
+      "./node_modules/fetch-blob/**",
+      "./node_modules/formdata-polyfill/**",
+      "./node_modules/opencollective-postinstall/**",
+      "./node_modules/regenerator-runtime/**",
+      "./node_modules/wasm-feature-detect/**",
+      "./node_modules/zlibjs/**",
     ],
   },
 };
