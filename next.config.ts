@@ -13,7 +13,11 @@ const nextConfig: NextConfig = {
     "/api/**/*": [
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
       "./node_modules/tesseract.js-core/**",
-      "./node_modules/tesseract.js/src/worker-script/**",
+      // The worker script's internal requires (constants/, utils/, etc.)
+      // aren't all picked up by selectively including subfolders — the
+      // first attempt (worker-script/** only) still 404'd on
+      // constants/imageType. Include the whole package source tree.
+      "./node_modules/tesseract.js/src/**",
       "./node_modules/@tesseract.js-data/eng/**",
     ],
   },
