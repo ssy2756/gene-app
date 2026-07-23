@@ -73,7 +73,8 @@ export function HomeScreen({
 
       <button
         onClick={openSearch}
-        className="relative -mt-3.5 mx-5 flex items-center gap-2.5 rounded-2xl bg-white px-4 py-3 text-left shadow-[0_4px_16px_rgba(58,47,136,.14)]"
+        className="relative mx-5 flex items-center gap-2.5 bg-white text-left shadow-[0_4px_16px_rgba(58,47,136,.14)]"
+        style={{ marginTop: "-14px", borderRadius: 15, padding: "13px 16px" }}
       >
         <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
           <circle cx="9" cy="9" r="6.5" stroke="#9a8fb0" strokeWidth="1.8" />
@@ -87,14 +88,33 @@ export function HomeScreen({
           <span className="text-[15px] font-semibold">Health risks overview</span>
         </div>
         <div className="flex items-center gap-4 pt-2">
-          <div
-            className="relative h-[110px] w-[110px] flex-none rounded-full"
-            style={{ background: `conic-gradient(${ringGradient})` }}
-          >
-            <div className="absolute inset-[11px] flex flex-col items-center justify-center rounded-full bg-white shadow-[inset_0_1px_3px_rgba(58,47,136,.06)]">
-              <span className="text-xl font-bold text-[#2b2540]">{home.conditionsTotal}</span>
-              <span className="mt-1 text-[8px] font-bold uppercase tracking-wide text-[#9a8fb0]">Conditions</span>
-              <span className="text-[8px] font-bold uppercase tracking-wide text-[#9a8fb0]">Analyzed</span>
+          <div className="relative h-[118px] w-[118px] flex-none">
+            <div
+              className="absolute rounded-full opacity-50 blur-[13px]"
+              style={{ inset: "-7px", background: `conic-gradient(${ringGradient})` }}
+            />
+            <div
+              className="absolute inset-0 rounded-full drop-shadow-[0_4px_10px_rgba(58,47,136,.2)]"
+              style={{ background: `conic-gradient(${ringGradient})` }}
+            >
+              <div
+                className="absolute inset-0 rounded-full mix-blend-soft-light"
+                style={{
+                  background:
+                    "repeating-conic-gradient(rgba(255,255,255,.5) 0deg 1.6deg, transparent 1.6deg 6deg)",
+                }}
+              />
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background: "radial-gradient(circle at 30% 26%, rgba(255,255,255,.45), transparent 55%)",
+                }}
+              />
+            </div>
+            <div className="absolute inset-[13px] z-[3] flex flex-col items-center justify-center rounded-full bg-white shadow-[inset_0_1px_3px_rgba(58,47,136,.06)]">
+              <span className="text-[22px] font-bold leading-none text-[#2b2540]">{home.conditionsTotal}</span>
+              <span className="mt-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#9a8fb0]">Conditions</span>
+              <span className="mt-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#9a8fb0]">Analyzed</span>
             </div>
           </div>
           <div className="flex flex-1 flex-col gap-2">

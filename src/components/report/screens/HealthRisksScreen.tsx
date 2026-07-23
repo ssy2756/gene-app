@@ -125,11 +125,14 @@ function ConditionRow({
       <div className="flex-1">
         <div className="text-[14.5px] font-semibold">{c.name}</div>
         <div className="mt-0.5 text-[11.5px] text-[#8a819c]">
-          {showSystem ? `${c.system}${c.tag ? " · " + c.tag : ""}` : c.tag || (c.genesAnalyzed ? `${c.genesAnalyzed} genes analyzed` : "")}
+          {showSystem ? `${c.system}${c.tag ? " · " + c.tag : ""}` : c.tag}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <div className="relative h-1 w-12 overflow-hidden rounded bg-[#eee6f2]">
+        <div
+          className="relative flex-none overflow-hidden rounded"
+          style={{ width: 52, height: 5, background: "#eee6f2" }}
+        >
           <div className="absolute inset-y-0 left-0 rounded" style={{ width: c.gaugePct, background: c.color }} />
         </div>
         <span className="whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: c.bg, color: c.text }}>

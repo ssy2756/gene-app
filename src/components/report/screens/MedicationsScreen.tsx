@@ -66,7 +66,10 @@ export function MedicationsScreen({
           </>
         )}
 
-        <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-[#ece7f2] bg-white px-3.5 py-2.5">
+        <div
+          className="mt-3 flex items-center gap-2.5 border border-[#ece7f2] bg-white"
+          style={{ borderRadius: 13, padding: "11px 14px" }}
+        >
           <SearchIcon />
           <input
             value={query}
@@ -95,8 +98,18 @@ export function MedicationsScreen({
 
         <button
           onClick={goDiplotype}
-          className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-[#ded2ef] bg-white px-4 py-3 text-left"
+          className="pressable mt-3 flex w-full items-center gap-[11px] rounded-[14px] border border-[#ded2ef] bg-white px-[15px] py-3 text-left"
         >
+          <div className="flex h-8 w-8 flex-none items-center justify-center rounded-[9px] bg-[#f3eef9]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M7 4c2 4 8 4 10 8M17 4c-2 4-8 4-10 8M7 20c2-4 8-4 10-8M17 20c-2-4-8-4-10-8"
+                stroke="#3A2F88"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
           <div className="flex-1">
             <div className="text-[13.5px] font-semibold">View diplotype panel</div>
             <div className="mt-0.5 text-[11px] text-[#8a819c]">Your raw gene test results</div>
