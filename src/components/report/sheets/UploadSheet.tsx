@@ -2,13 +2,7 @@
 
 import { useState } from "react";
 
-export function UploadSheet({
-  onClose,
-  onUploaded,
-}: {
-  onClose: () => void;
-  onUploaded: (uid: string) => void;
-}) {
+export function UploadSheet({ onClose }: { onClose: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "error" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -77,18 +71,23 @@ export function UploadSheet({
               Parsed successfully. Report UID:
               <div className="mt-1 font-mono text-base font-semibold text-[#2b2540]">{resultUid}</div>
             </div>
+            <div className="mt-3 text-center text-xs text-[#9a8fb0]">
+              That UID can now be used to register a new account for this report.
+            </div>
             <button
-              onClick={() => onUploaded(resultUid)}
+              onClick={onClose}
               className="mt-5 w-full rounded-2xl bg-[#3A2F88] py-3.5 text-center text-sm font-semibold text-white"
             >
-              Load this report
+              Done
             </button>
           </>
         )}
 
-        <button onClick={onClose} className="mt-2.5 w-full rounded-2xl py-3 text-center text-sm font-semibold text-[#8a819c]">
-          Cancel
-        </button>
+        {status !== "done" && (
+          <button onClick={onClose} className="mt-2.5 w-full rounded-2xl py-3 text-center text-sm font-semibold text-[#8a819c]">
+            Cancel
+          </button>
+        )}
       </div>
     </div>
   );

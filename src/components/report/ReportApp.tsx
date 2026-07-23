@@ -12,6 +12,7 @@ import { HealthRisksScreen } from "./screens/HealthRisksScreen";
 import { ConditionDetailScreen } from "./screens/ConditionDetailScreen";
 import { LifestyleScreen } from "./screens/LifestyleScreen";
 import { CarePlanScreen } from "./screens/CarePlanScreen";
+import { CareConditionDetailScreen } from "./screens/CareConditionDetailScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { ShareCardScreen } from "./screens/ShareCardScreen";
 import { SearchOverlay } from "./sheets/SearchOverlay";
@@ -27,22 +28,22 @@ export type ScreenName =
   | "condDetail"
   | "lifestyle"
   | "care"
+  | "careDetail"
   | "profile"
   | "share";
 
 export function ReportApp({
   report,
   onLogout,
-  onLoadUid,
 }: {
   report: DisplayReport;
   onLogout: () => void;
-  onLoadUid?: (uid: string) => Promise<void>;
 }) {
   const [screen, setScreen] = useState<ScreenName>("home");
   const [previousScreen, setPreviousScreen] = useState<ScreenName>("home");
   const [drugId, setDrugId] = useState<string | null>(null);
   const [condId, setCondId] = useState<string | null>(null);
+  const [careConditionId, setCareConditionId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [defineTerm, setDefineTerm] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -55,11 +56,13 @@ export function ReportApp({
       ? "meds"
       : screen === "condDetail"
         ? "risks"
-        : screen === "share"
-          ? previousScreen === "diplotype" || previousScreen === "medDetail"
-            ? "meds"
-            : previousScreen
-          : screen;
+        : screen === "careDetail"
+          ? "care"
+          : screen === "share"
+            ? previousScreen === "diplotype" || previousScreen === "medDetail"
+              ? "meds"
+              : previousScreen
+            : screen;
 
   function goShare() {
     setPreviousScreen(screen);
@@ -119,7 +122,18 @@ export function ReportApp({
         />
       )}
       {screen === "lifestyle" && <LifestyleScreen report={report} />}
-      {screen === "care" && <CarePlanScreen report={report} />}
+      {screen === "care" && (
+        <CarePlanScreen
+          report={report}
+          openCondition={(id) => {
+            setCareConditionId(id);
+            setScreen("careDetail");
+          }}
+        />
+      )}
+      {screen === "careDetail" && (
+        <CareConditionDetailScreen report={report} conditionId={careConditionId} goBack={() => setScreen("care")} />
+      )}
       {screen === "profile" && (
         <ProfileScreen report={report} onLogout={onLogout} goShare={goShare} openUpload={() => setUploadOpen(true)} />
       )}
@@ -146,15 +160,7 @@ export function ReportApp({
 
       <DefineSheet term={defineTerm} body={defineTerm ? glossary[defineTerm] ?? "" : ""} onClose={() => setDefineTerm(null)} />
 
-      {uploadOpen && (
-        <UploadSheet
-          onClose={() => setUploadOpen(false)}
-          onUploaded={async (uid) => {
-            setUploadOpen(false);
-            if (onLoadUid) await onLoadUid(uid);
-          }}
-        />
-      )}
+      {uploadOpen && <UploadSheet onClose={() => setUploadOpen(false)} />}
     </div>
   );
 }

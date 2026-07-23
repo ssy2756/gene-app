@@ -369,30 +369,35 @@ function mapFitness(raw: RawReport): { headline: string; sub: string; tips: stri
   };
 }
 
-// ---------- care plan (derived from medical_recommendations) ----------
+// ---------- care plan (derived from medical_recommendations, grouped by condition) ----------
 
-export type CarePlanItemView = {
-  id: string;
-  label: string;
+export type CarePlanCheckView = {
   reason: string;
   cadence: string;
-  badge: string;
 };
 
-function mapCarePlan(conditions: ConditionView[]): CarePlanItemView[] {
-  const items: CarePlanItemView[] = [];
-  for (const c of conditions) {
-    for (const r of c.recommendations) {
-      items.push({
-        id: `${c.id}-${items.length}`,
-        label: c.name,
-        reason: r,
-        cadence: extractCadence(r),
-        badge: c.name.slice(0, 2).toUpperCase(),
-      });
-    }
-  }
-  return items;
+export type CarePlanConditionView = {
+  id: string;
+  name: string;
+  badge: string;
+  color: string;
+  bg: string;
+  text: string;
+  checks: CarePlanCheckView[];
+};
+
+function mapCarePlan(conditions: ConditionView[]): CarePlanConditionView[] {
+  return conditions
+    .filter((c) => c.recommendations.length > 0)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      badge: c.name.slice(0, 2).toUpperCase(),
+      color: c.color,
+      bg: c.bg,
+      text: c.text,
+      checks: c.recommendations.map((r) => ({ reason: r, cadence: extractCadence(r) })),
+    }));
 }
 
 // ---------- home summary ----------
@@ -436,7 +441,7 @@ export type DisplayReport = {
   vitamins: VitaminTierView[];
   sensitivities: SensitivityView[];
   fitness: { headline: string; sub: string; tips: string[] };
-  carePlan: CarePlanItemView[];
+  carePlan: CarePlanConditionView[];
   home: HomeSummaryView;
 };
 

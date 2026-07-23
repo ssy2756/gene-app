@@ -9,7 +9,7 @@ export function ShareCardScreen({ report, goBack }: { report: DisplayReport; goB
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="min-h-screen bg-[#efe9f6] pb-28">
+    <div className="min-h-full bg-[#efe9f6] pb-28">
       <div className="flex items-center justify-between px-4 pb-3 pt-4">
         <button onClick={goBack} className="text-sm font-semibold text-[#3A2F88]">
           ← Back

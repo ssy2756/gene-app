@@ -88,12 +88,50 @@ export const REPORT_JSON_SCHEMA = {
     fitness_and_nutrigenomics: {
       type: "object",
       properties: {
-        metabolism: { type: "array", items: { type: "object" } },
-        food_sensitivity: { type: "array", items: { type: "object" } },
-        musculoskeletal: { type: "object" },
+        metabolism: {
+          type: "array",
+          description: "Every fitness/exercise recommendation sentence found on the fitness pages.",
+          items: {
+            type: "object",
+            properties: { recommendation: { type: "string" } },
+          },
+        },
+        food_sensitivity: {
+          type: "array",
+          description: "Every food/substance sensitivity listed (e.g. lactose, caffeine, gluten, alcohol).",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              gene: { type: "string" },
+              level: { type: "string" },
+            },
+          },
+        },
+        musculoskeletal: {
+          type: "object",
+          properties: {
+            profile: { type: "string" },
+            detail: { type: "string" },
+          },
+        },
       },
     },
-    vitamins_and_minerals: { type: "object" },
+    vitamins_and_minerals: {
+      type: "array",
+      description:
+        "Every vitamin/mineral/nutrient recommendation on the vitamins & minerals pages — do not omit or summarize.",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          tier: { type: ["string", "null"] },
+          why: { type: "string" },
+          dose: { type: "string" },
+        },
+        required: ["name"],
+      },
+    },
     methylation: {
       type: "object",
       properties: {
@@ -104,15 +142,38 @@ export const REPORT_JSON_SCHEMA = {
     pharmacogenomics: {
       type: "object",
       properties: {
-        diplotypes: { type: "array", items: { type: "object" } },
-        drug_recommendations: {
+        diplotypes: {
           type: "array",
+          description: "Every gene tested in the diplotype panel — do not omit any.",
           items: {
             type: "object",
             properties: {
-              molecule_class: { type: "string" },
-              drug: { type: "string" },
+              gene: { type: "string" },
+              diplotype: { type: "string" },
+              phenotype: { type: "string" },
             },
+          },
+        },
+        drug_recommendations: {
+          type: "array",
+          description:
+            "EVERY individual drug/medication card in the pharmacogenomics section — there are typically 10+ drugs, do not sample a subset.",
+          items: {
+            type: "object",
+            properties: {
+              drug: { type: "string" },
+              molecule_class: { type: "string" },
+              gene: { type: "string" },
+              diplotype: { type: "string" },
+              phenotype: { type: "string" },
+              status: {
+                type: "string",
+                description: "e.g. 'Use as Directed', 'Use with Caution', 'Adjust Dose', 'Not Enough Evidence'",
+              },
+              evidence_level: { type: "string" },
+              recommendation: { type: "string" },
+            },
+            required: ["drug"],
           },
         },
         summary: { type: "object" },

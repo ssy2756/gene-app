@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS reports (
 
 CREATE INDEX IF NOT EXISTS reports_data_gin_idx ON reports USING GIN (data);
 
+-- NOTE: `users` (email+password) isn't wired into the login flow right now —
+-- logging in just requires a valid report UID (see src/app/api/auth/login).
+-- The table is kept for when real account credentials come back.
+
 -- Google Drive ingestion pipeline (see src/lib/google-drive.ts).
 
 -- Single-row table holding the Drive `changes.watch` channel state, so the

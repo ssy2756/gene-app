@@ -96,7 +96,7 @@ export function SearchOverlay({
   const results = q ? index.filter((r) => r.key.toLowerCase().includes(q)).slice(0, 12) : [];
 
   return (
-    <div className="fixed inset-0 z-20 flex flex-col bg-[#f6f4f8]">
+    <div className="fixed inset-0 z-20 mx-auto flex max-w-md flex-col bg-[#f6f4f8]">
       <div className="flex items-center gap-2.5 px-4 pb-3 pt-4">
         <div className="flex flex-1 items-center gap-2.5 rounded-2xl border border-[#ece7f2] bg-white px-3.5 py-2.5">
           <input

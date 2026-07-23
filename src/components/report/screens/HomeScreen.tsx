@@ -38,7 +38,7 @@ export function HomeScreen({
   openSearch: () => void;
 }) {
   const { patient, home, carePlan } = report;
-  const topCareItems = carePlan.slice(0, 3);
+  const topConditions = carePlan.slice(0, 3);
   const firstName = patient.name !== "—" ? patient.name.split(" ")[0] : "there";
   const initials = patient.name !== "—" ? patient.name.slice(0, 2).toUpperCase() : "—";
   const ringGradient = buildRingGradient(home.riskCounts);
@@ -117,24 +117,24 @@ export function HomeScreen({
             See care plan
           </button>
         </div>
-        {topCareItems.length === 0 && (
+        {topConditions.length === 0 && (
           <div className="px-4 pb-4 text-[13px] text-[#8a819c]">No monitoring items yet.</div>
         )}
-        {topCareItems.map((a) => (
+        {topConditions.map((c) => (
           <div
-            key={a.id}
+            key={c.id}
             onClick={goCare}
             className="flex cursor-pointer items-center gap-3 border-t border-[#f2eef7] px-4 py-3"
           >
             <div className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] bg-[#f3eef9] text-[11px] font-bold text-[#3A2F88]">
-              {a.badge}
+              {c.badge}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-semibold">{a.label}</div>
-              <div className="mt-0.5 truncate text-[11.5px] text-[#8a819c]">{a.reason}</div>
+              <div className="text-[13.5px] font-semibold">{c.name}</div>
+              <div className="mt-0.5 truncate text-[11.5px] text-[#8a819c]">{c.checks[0]?.reason}</div>
             </div>
             <span className="whitespace-nowrap rounded-full bg-[#f3eef9] px-2.5 py-1 text-[11px] font-semibold text-[#3A2F88]">
-              {a.cadence}
+              {c.checks.length} check{c.checks.length === 1 ? "" : "s"}
             </span>
           </div>
         ))}

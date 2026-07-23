@@ -18,10 +18,11 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
+// Simplified session: a user just enters a valid report UID to log in, no
+// email/password yet (that's a later iteration — hashPassword/verifyPassword
+// above are kept ready for when that comes back).
 export type SessionPayload = {
-  userId: string;
-  email: string;
-  mustChangePassword: boolean;
+  uid: string;
 };
 
 export async function createSessionToken(payload: SessionPayload) {
