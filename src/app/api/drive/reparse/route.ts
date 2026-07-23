@@ -3,9 +3,13 @@ import { sql } from "@/lib/db";
 import { downloadFile } from "@/lib/google-drive";
 import { ingestReportPdf, IngestError } from "@/lib/ingest-report";
 
-// Parsing a multi-page PDF via OpenAI can take well over Vercel's default
-// serverless timeout — same as /api/drive/webhook.
-export const maxDuration = 300;
+// Parsing a multi-page PDF (OCR pass + a dozen-odd parallel DeepSeek
+// calls) can take well over Vercel's default serverless timeout — same
+// as /api/drive/webhook. A real reparse hit the previous 300s cap under
+// slower conditions (DeepSeek latency variance across ~12 concurrent
+// calls), so this is raised with headroom rather than tuned to the exact
+// observed duration.
+export const maxDuration = 800;
 
 // Re-runs ingestion for a report that's already been processed once, using
 // the same Drive file (looked up via processed_drive_files by uid) rather

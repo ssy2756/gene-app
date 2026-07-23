@@ -3,9 +3,11 @@ import { sql } from "@/lib/db";
 import { downloadFile, listPdfChangesSince } from "@/lib/google-drive";
 import { ingestReportPdf, IngestError } from "@/lib/ingest-report";
 
-// Vercel's default function timeout is too short for parsing a 90-page PDF
-// via Claude; raise it (requires a paid plan for durations beyond ~60s).
-export const maxDuration = 300;
+// Vercel's default function timeout is too short for parsing a 90-page
+// PDF (OCR pass + a dozen-odd parallel DeepSeek calls); raise it (requires
+// a paid plan for durations beyond ~60s). 300s wasn't enough headroom
+// under real conditions — see reparse/route.ts for the same bump.
+export const maxDuration = 800;
 
 // Google Drive POSTs an empty ping here whenever anything changes in the
 // Drive the service account can see — the actual delta must be fetched
