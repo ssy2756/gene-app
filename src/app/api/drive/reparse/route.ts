@@ -11,8 +11,9 @@ export const maxDuration = 300;
 // the same Drive file (looked up via processed_drive_files by uid) rather
 // than waiting for a new Drive change event — useful after a prompt/schema
 // fix when the original extraction is known to be stale/wrong. Same
-// CRON_SECRET auth pattern as /api/drive/register-watch.
-export async function POST(request: NextRequest) {
+// CRON_SECRET auth pattern as /api/drive/register-watch (checked on both
+// GET and POST since this triggers a real write + external API call).
+async function handle(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const auth = request.headers.get("authorization");
@@ -43,3 +44,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Reparse failed" }, { status: 500 });
   }
 }
+
+export const GET = handle;
+export const POST = handle;
