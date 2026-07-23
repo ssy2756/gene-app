@@ -1,5 +1,14 @@
 import { createCanvas, type Canvas, type SKRSContext2D } from "@napi-rs/canvas";
 import { createWorker } from "tesseract.js";
+// pdfjs-dist is marked as a serverExternalPackage (not bundled), so Next's
+// output file tracing is what decides whether pdf.worker.mjs ships in the
+// deployed function — and it only does that for files it sees statically
+// imported somewhere. pdfjs itself only dynamically imports this one at
+// runtime ("fake worker" — run in the same process, no real worker
+// thread), which tracing can't see, so without this explicit import the
+// file gets left out and getDocument() fails in production with "Setting
+// up fake worker failed: Cannot find module .../pdf.worker.mjs".
+import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 // Bundles the English trained-data file locally (~13MB) so OCR never
 // depends on fetching it from the jsdelivr CDN at request time — that
 // fetch is slow on serverless cold starts and can be blocked by network
