@@ -99,7 +99,8 @@ export const REPORT_JSON_SCHEMA = {
         },
         food_sensitivity: {
           type: "array",
-          description: "Every food/substance sensitivity listed (e.g. lactose, caffeine, gluten, alcohol).",
+          description:
+            "Every food/substance sensitivity listed (e.g. lactose, caffeine, gluten, insulin resistance). Source: the document's 'Your Metabolism' (or similarly named) section. This section reliably exists in these reports — this field must always be populated, never left empty, when it does.",
           items: {
             type: "object",
             properties: {
