@@ -323,10 +323,26 @@ function groupByOwnTier(items: unknown[]): VitaminTierView[] {
   return [...groups.entries()].map(([tier, tierItems]) => ({ tier, color: tierColor(tier), items: tierItems }));
 }
 
+// Tiers must always display in this clinical order regardless of the
+// order keys happened to appear in the parsed JSON (object key order
+// just reflects whatever order the model emitted them in, which varies).
+const TIER_DISPLAY_ORDER = ["essential", "advised", "optional"];
+
+function sortByTierOrder(tiers: VitaminTierView[]): VitaminTierView[] {
+  return [...tiers].sort((a, b) => {
+    const ai = TIER_DISPLAY_ORDER.indexOf(a.tier.trim().toLowerCase());
+    const bi = TIER_DISPLAY_ORDER.indexOf(b.tier.trim().toLowerCase());
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
+
 function mapVitamins(raw: RawReport): VitaminTierView[] {
   const vm = raw.vitamins_and_minerals;
   if (Array.isArray(vm)) {
-    return groupByOwnTier(vm);
+    return sortByTierOrder(groupByOwnTier(vm));
   }
   if (isRecord(vm)) {
     // A generic "items"/"list" key means the array is wrapped in a single
@@ -335,15 +351,17 @@ function mapVitamins(raw: RawReport): VitaminTierView[] {
     // treating the wrapper key itself as a (wrong) single tier name.
     const genericKey = ["items", "list", "vitamins", "nutrients"].find((k) => Array.isArray(vm[k]));
     if (genericKey) {
-      return groupByOwnTier(vm[genericKey] as unknown[]);
+      return sortByTierOrder(groupByOwnTier(vm[genericKey] as unknown[]));
     }
-    return Object.entries(vm)
-      .filter(([, v]) => Array.isArray(v))
-      .map(([tier, v]) => ({
-        tier,
-        color: tierColor(tier),
-        items: (v as unknown[]).map(mapVitaminItem),
-      }));
+    return sortByTierOrder(
+      Object.entries(vm)
+        .filter(([, v]) => Array.isArray(v))
+        .map(([tier, v]) => ({
+          tier,
+          color: tierColor(tier),
+          items: (v as unknown[]).map(mapVitaminItem),
+        }))
+    );
   }
   return [];
 }
