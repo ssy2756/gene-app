@@ -93,7 +93,10 @@ const PHARMACOGENOMICS_PROMPT_BASE =
 // invalid JSON). Splitting the OCR'd document into page-range chunks and
 // running one pharmacogenomics extraction call per chunk (in parallel),
 // then merging, keeps each individual response small enough to finish.
-const PHARMACOGENOMICS_PAGES_PER_CHUNK = 15;
+// 15 pages/chunk still overflowed on a dense stretch of drug tables (one
+// chunk hit finish_reason=length at ~28k output chars). Dropping to 6
+// pages/chunk trades more parallel calls for a much safer per-call margin.
+const PHARMACOGENOMICS_PAGES_PER_CHUNK = 6;
 
 function splitDocumentByPages(documentText: string, pagesPerChunk: number): string[] {
   const pageBlocks = documentText.split(/(?=--- Page \d+ ---)/g).filter((b) => b.trim());
