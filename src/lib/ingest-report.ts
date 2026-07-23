@@ -72,7 +72,9 @@ const GENE_REPORT_PROMPT_BASE =
   "top-to-bottom reading order, so assign each item to the nearest tier label that appears " +
   "before it in the text, not to a tier assumed from habit or list position. A tier label can " +
   "appear in the text with zero items listed after it before the next tier label — that is " +
-  "valid, leave it with no items, never invent items to fill it.";
+  "valid, leave it with no items, never invent items to fill it. Do NOT add a placeholder item " +
+  "(e.g. name 'None'/'N/A'/'-') for an empty tier — an empty tier means zero objects in the " +
+  "array for that tier, not one object representing emptiness.";
 
 const PHARMACOGENOMICS_PROMPT_BASE =
   "The document text below is ONE PORTION (a page range) of a larger genetic report's " +
@@ -231,6 +233,15 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
   ]);
 
   const pharmacogenomics = mergePharmacogenomics(pharmacogenomicsResults);
+  if (Array.isArray(mainData.vitamins_and_minerals)) {
+    // Defense in depth: the model has occasionally added a placeholder
+    // item (name "None"/"N/A"/"-") to represent an empty tier instead of
+    // just leaving it with zero items, despite the prompt saying not to.
+    mainData.vitamins_and_minerals = mainData.vitamins_and_minerals.filter((item) => {
+      const name = item && typeof item === "object" ? String((item as Record<string, unknown>).name ?? "").trim() : "";
+      return name && !["none", "n/a", "na", "-", "nil"].includes(name.toLowerCase());
+    });
+  }
   const merged = { ...mainData, pharmacogenomics };
 
   const validation = reportDataSchema.safeParse(merged);
