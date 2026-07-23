@@ -38,7 +38,7 @@ export function HealthRisksScreen({
   }, [conditions]);
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "slideIn .25s ease" }}>
       <div className="px-5 pb-3 pt-3">
         <div className="text-[22px] font-bold tracking-tight">Health risks</div>
         <div className="mt-0.5 text-[12.5px] text-[#8a819c]">
@@ -120,7 +120,7 @@ function ConditionRow({
   return (
     <div
       onClick={onClick}
-      className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]"
+      className="flex cursor-pointer items-center gap-3 card rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]"
     >
       <div className="flex-1">
         <div className="text-[14.5px] font-semibold">{c.name}</div>
@@ -133,7 +133,15 @@ function ConditionRow({
           className="relative flex-none overflow-hidden rounded"
           style={{ width: 52, height: 5, background: "#eee6f2" }}
         >
-          <div className="absolute inset-y-0 left-0 rounded" style={{ width: c.gaugePct, background: c.color }} />
+          <div
+            className="absolute inset-y-0 left-0 rounded"
+            style={{
+              width: c.gaugePct,
+              background: c.color,
+              transformOrigin: "left",
+              animation: "growX .6s .1s cubic-bezier(.4,0,.2,1) both",
+            }}
+          />
         </div>
         <span className="whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: c.bg, color: c.text }}>
           {c.riskLabel}

@@ -4,6 +4,17 @@ import type { DisplayReport } from "@/lib/report-mapping";
 import { TapDefine } from "../TapDefine";
 import { BackIcon, CheckIcon, InfoIcon, ShareIcon } from "../Icons";
 
+// Mockup's `icon(status)`: a checkmark for "directed", an exclamation glyph
+// for every other status (caution / adjust / evidence).
+function BannerIcon({ statusKey }: { statusKey: string }) {
+  if (statusKey === "directed") return <CheckIcon color="#fff" />;
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 8v5M12 16.5v.01" />
+    </svg>
+  );
+}
+
 export function MedicationDetailScreen({
   report,
   drugId,
@@ -33,7 +44,7 @@ export function MedicationDetailScreen({
   }
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "slideIn .22s ease" }}>
       <div className="px-5 pb-2 pt-3">
         <button onClick={goBack} className="flex items-center gap-1 text-sm font-semibold text-[#3A2F88]">
           <BackIcon /> Medications
@@ -52,7 +63,7 @@ export function MedicationDetailScreen({
           style={{ background: drug.bannerBg, borderColor: drug.bannerBorder }}
         >
           <div className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-white" style={{ background: drug.color }}>
-            <CheckIcon color="#fff" />
+            <BannerIcon statusKey={drug.statusKey} />
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: drug.pillText }}>

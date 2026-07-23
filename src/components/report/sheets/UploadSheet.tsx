@@ -31,8 +31,16 @@ export function UploadSheet({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-30 flex items-end justify-center bg-[rgba(20,10,35,.4)]">
-      <div onClick={(e) => e.stopPropagation()} className="mx-auto w-full max-w-md rounded-t-3xl bg-white p-6 pb-8">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-30 flex items-end justify-center bg-[rgba(20,10,35,.4)]"
+      style={{ animation: "fadeIn .15s ease" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="mx-auto w-full max-w-md rounded-t-3xl bg-white p-6 pb-8"
+        style={{ animation: "sheetUp .28s cubic-bezier(.2,.8,.2,1)" }}
+      >
         <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[#e0d8ec]" />
         <div className="mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-[#f3eef9] text-2xl">
           ⬆

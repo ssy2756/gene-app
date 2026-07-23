@@ -15,7 +15,7 @@ export function DiplotypeScreen({
   onDefine: (term: string) => void;
 }) {
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "slideIn .22s ease" }}>
       <div className="px-5 pb-2 pt-3">
         <button onClick={goBack} className="flex items-center gap-1 text-sm font-semibold text-[#3A2F88]">
           <BackIcon /> Medications
@@ -28,7 +28,7 @@ export function DiplotypeScreen({
           pharmacogene tested. Medication recommendations on the previous screens are derived from this panel.
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+        <div className="mt-4 overflow-hidden card rounded-2xl bg-white shadow-[0_2px_8px_rgba(58,47,136,.05)]">
           {report.genePanel.map((g, i) => (
             <div
               key={`${g.gene}-${i}`}

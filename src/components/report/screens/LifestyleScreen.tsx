@@ -7,7 +7,7 @@ export function LifestyleScreen({ report }: { report: DisplayReport }) {
   const { vitamins, sensitivities, fitness } = report;
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "slideIn .25s ease" }}>
       <div className="px-5 pb-3 pt-3">
         <div className="text-[22px] font-bold tracking-tight">Lifestyle</div>
         <div className="mt-0.5 text-[12.5px] text-[#8a819c]">Nutrition, sensitivities &amp; fitness</div>
@@ -24,7 +24,7 @@ export function LifestyleScreen({ report }: { report: DisplayReport }) {
                 {t.tier}
               </span>
             </div>
-            <div className="overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+            <div className="overflow-hidden card rounded-2xl bg-white shadow-[0_2px_8px_rgba(58,47,136,.05)]">
               {t.items.map((v, i) => (
                 <div key={i} className="flex items-center gap-3 border-b border-[#f4f0f8] px-3.5 py-3 last:border-b-0">
                   <div className="flex-1">
@@ -43,7 +43,7 @@ export function LifestyleScreen({ report }: { report: DisplayReport }) {
         <div className="my-4 text-sm font-bold">Food sensitivities</div>
         <div className="flex flex-col gap-2">
           {sensitivities.map((s, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+            <div key={i} className="flex items-center gap-3 card rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
               <div className="flex-1">
                 <div className="text-sm font-semibold">{s.name}</div>
                 <div className="mt-0.5 text-[11.5px] text-[#8a819c]">{s.gene}</div>
@@ -59,7 +59,7 @@ export function LifestyleScreen({ report }: { report: DisplayReport }) {
         </div>
 
         <div className="my-4 text-sm font-bold">Fitness &amp; exercise</div>
-        <div className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+        <div className="card rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
           <div className="text-[15px] font-bold">{fitness.headline}</div>
           {fitness.sub && <div className="mt-0.5 text-xs text-[#8a819c]">{fitness.sub}</div>}
           <div className="mt-3.5 flex flex-col gap-2">

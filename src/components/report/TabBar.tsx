@@ -46,7 +46,10 @@ const TABS: { key: ScreenName; label: string }[] = [
 
 export function TabBar({ active, onSelect }: { active: ScreenName; onSelect: (s: ScreenName) => void }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-md justify-between border-t border-[#e7e0ef] bg-[rgba(251,250,255,.94)] px-3 pb-6 pt-2 backdrop-blur">
+    <div
+      className="tabbar fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-md justify-between backdrop-blur"
+      style={{ borderTop: "1px solid #e7e0ef", background: "rgba(251,250,255,.94)", padding: "9px 12px 22px" }}
+    >
       {TABS.map((tab) => {
         const isActive = active === tab.key;
         const color = isActive ? "#3A2F88" : "#9a8fb0";
@@ -54,10 +57,18 @@ export function TabBar({ active, onSelect }: { active: ScreenName; onSelect: (s:
           <button
             key={tab.key}
             onClick={() => onSelect(tab.key)}
-            className="flex flex-1 flex-col items-center gap-1"
+            className="flex flex-1 flex-col items-center gap-1 transition-colors duration-[220ms] ease-out active:scale-90"
             style={{ color }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              className="transition-transform duration-[250ms]"
+              style={{ transitionTimingFunction: "cubic-bezier(.2,.9,.3,1.5)" }}
+            >
               {ICONS[tab.key]}
             </svg>
             <span className="text-[9px] font-semibold">{tab.label}</span>

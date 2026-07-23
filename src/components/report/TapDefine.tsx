@@ -39,7 +39,7 @@ export function TapDefine({
             <span
               key={i}
               onClick={() => onDefine(canonical)}
-              className="cursor-pointer border-b border-dashed border-[#b9a6d6] font-semibold text-[#3A2F88]"
+              className="tapword cursor-pointer border-b border-dashed border-[#b9a6d6] font-semibold text-[#3A2F88]"
             >
               {part}
             </span>

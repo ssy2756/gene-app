@@ -47,7 +47,7 @@ export function CareConditionDetailScreen({
   }
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "slideIn .22s ease" }}>
       <div className="px-5 pb-2 pt-3">
         <button onClick={goBack} className="flex items-center gap-1 text-sm font-semibold text-[#3A2F88]">
           <BackIcon /> Care plan
@@ -70,7 +70,7 @@ export function CareConditionDetailScreen({
           {condition.checks.map((check, i) => {
             const on = !!reminders[i];
             return (
-              <div key={i} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+              <div key={i} className="flex items-center gap-3 card rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
                 <div className="flex-1 text-[13.5px] leading-relaxed text-[#2b2540]">{check.reason}</div>
                 <div className="flex flex-col items-end gap-1.5">
                   <span className="whitespace-nowrap rounded-lg bg-[#f3eef9] px-2.5 py-1 text-[11px] font-semibold text-[#3A2F88]">

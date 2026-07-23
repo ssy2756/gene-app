@@ -44,17 +44,24 @@ export function HomeScreen({
   const ringGradient = buildRingGradient(home.riskCounts);
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "fadeIn .25s ease" }}>
       <div
-        className="relative overflow-hidden rounded-b-[26px] px-6 pb-6 pt-5"
-        style={{ background: "linear-gradient(150deg, #BFBBDC, #6A5FA8)" }}
+        className="relative overflow-hidden px-[22px] pb-6 pt-[18px]"
+        style={{ background: "linear-gradient(150deg, #BFBBDC, #6A5FA8)", borderRadius: "0 0 26px 26px" }}
       >
         <svg
-          className="pointer-events-none absolute -top-1 right-14 opacity-[0.14]"
-          width="110" height="130" viewBox="0 0 140 150" fill="none"
+          style={{ position: "absolute", opacity: 0.14, left: 150, top: -2, zIndex: 7 }}
+          width="130" height="150" viewBox="0 0 140 150" fill="none"
         >
           <path d="M38 0C38 26 100 34 100 60C100 86 38 94 38 120C38 142 100 150 100 150" stroke="#fff" strokeWidth="2.5" />
           <path d="M100 0C100 26 38 34 38 60C38 86 100 94 100 120C100 142 38 150 38 150" stroke="#fff" strokeWidth="2.5" />
+          <line x1="45" y1="12" x2="93" y2="12" stroke="#fff" strokeWidth="1.5" />
+          <line x1="55" y1="30" x2="83" y2="30" stroke="#fff" strokeWidth="1.5" />
+          <line x1="55" y1="48" x2="83" y2="48" stroke="#fff" strokeWidth="1.5" />
+          <line x1="45" y1="60" x2="93" y2="60" stroke="#fff" strokeWidth="1.5" />
+          <line x1="55" y1="78" x2="83" y2="78" stroke="#fff" strokeWidth="1.5" />
+          <line x1="55" y1="96" x2="83" y2="96" stroke="#fff" strokeWidth="1.5" />
+          <line x1="45" y1="120" x2="93" y2="120" stroke="#fff" strokeWidth="1.5" />
         </svg>
 
         <div className="relative flex items-center justify-between gap-3">
@@ -83,7 +90,7 @@ export function HomeScreen({
         <span className="text-sm text-[#9a8fb0]">Search drugs, conditions, nutrients…</span>
       </button>
 
-      <div className="mx-5 mt-5 rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+      <div className="mx-5 mt-5 card rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
         <div className="flex items-baseline justify-between pb-1">
           <span className="text-[15px] font-semibold">Health risks overview</span>
         </div>
@@ -91,11 +98,18 @@ export function HomeScreen({
           <div className="relative h-[118px] w-[118px] flex-none">
             <div
               className="absolute rounded-full opacity-50 blur-[13px]"
-              style={{ inset: "-7px", background: `conic-gradient(${ringGradient})` }}
+              style={{
+                inset: "-7px",
+                background: `conic-gradient(${ringGradient})`,
+                animation: "ringFadeIn 1s .05s cubic-bezier(.3,0,.2,1) both",
+              }}
             />
             <div
               className="absolute inset-0 rounded-full drop-shadow-[0_4px_10px_rgba(58,47,136,.2)]"
-              style={{ background: `conic-gradient(${ringGradient})` }}
+              style={{
+                background: `conic-gradient(${ringGradient})`,
+                animation: "ringScaleIn .7s .05s cubic-bezier(.25,.9,.3,1.2) both",
+              }}
             >
               <div
                 className="absolute inset-0 rounded-full mix-blend-soft-light"
@@ -111,6 +125,13 @@ export function HomeScreen({
                 }}
               />
             </div>
+            <div
+              className="absolute inset-0 z-[2] rounded-full"
+              style={{
+                background: "conic-gradient(#fff 0 var(--rev,0deg), transparent var(--rev,0deg))",
+                animation: "donutReveal 1s .15s cubic-bezier(.4,0,.2,1) both",
+              }}
+            />
             <div className="absolute inset-[13px] z-[3] flex flex-col items-center justify-center rounded-full bg-white shadow-[inset_0_1px_3px_rgba(58,47,136,.06)]">
               <span className="text-[22px] font-bold leading-none text-[#2b2540]">{home.conditionsTotal}</span>
               <span className="mt-[3px] text-[8.5px] font-bold uppercase tracking-wide text-[#9a8fb0]">Conditions</span>
@@ -130,7 +151,7 @@ export function HomeScreen({
         </div>
       </div>
 
-      <div className="mx-5 mt-5 rounded-2xl bg-white shadow-[0_2px_8px_rgba(58,47,136,.05)]">
+      <div className="mx-5 mt-5 card rounded-2xl bg-white shadow-[0_2px_8px_rgba(58,47,136,.05)]">
         <div className="flex items-baseline justify-between px-4 pb-3 pt-4">
           <span className="text-[15px] font-semibold">Most frequent monitoring</span>
           <button onClick={goCare} className="text-xs font-semibold text-[#3A2F88]">

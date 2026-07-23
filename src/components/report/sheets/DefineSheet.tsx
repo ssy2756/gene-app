@@ -15,10 +15,12 @@ export function DefineSheet({
     <div
       onClick={onClose}
       className="fixed inset-0 z-30 flex items-end justify-center bg-[rgba(20,10,35,.4)]"
+      style={{ animation: "fadeIn .15s ease" }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className="mx-auto w-full max-w-md rounded-t-3xl bg-white p-6 pb-8"
+        style={{ animation: "sheetUp .28s cubic-bezier(.2,.8,.2,1)" }}
       >
         <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[#e0d8ec]" />
         <span className="rounded-lg bg-[#f3eef9] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#4D3F9C]">

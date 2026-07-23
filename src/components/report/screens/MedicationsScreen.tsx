@@ -37,7 +37,7 @@ export function MedicationsScreen({
   const adjustPct = total ? Math.max(0, 100 - directedPct - cautionPct) : 0;
 
   return (
-    <div className="pb-28">
+    <div className="pb-28" style={{ animation: "slideIn .25s ease" }}>
       <div className="px-5 pb-3 pt-3">
         <div className="text-[22px] font-bold tracking-tight">Medications</div>
         <div className="mt-0.5 text-[12.5px] text-[#8a819c]">How your genes affect {medications.length} drugs</div>
@@ -123,7 +123,7 @@ export function MedicationsScreen({
           <div
             key={d.id}
             onClick={() => openDrug(d.id)}
-            className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]"
+            className="flex cursor-pointer items-center gap-3 card rounded-2xl bg-white p-3.5 shadow-[0_2px_8px_rgba(58,47,136,.05)]"
           >
             <div className="h-full w-1 flex-none self-stretch rounded" style={{ background: d.color }} />
             <div className="min-w-0 flex-1">
