@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { sql } from "@/lib/db";
-import { GENE_REPORT_SCHEMA, PHARMACOGENOMICS_SCHEMA, reportDataSchema } from "@/lib/report-schema";
+import { REPORT_JSON_SCHEMA, reportDataSchema } from "@/lib/report-schema";
 
 // Lazily constructed on first use, not at module load: the OpenAI SDK throws
 // immediately if no API key is available, and Next.js evaluates route
@@ -28,96 +28,20 @@ export class IngestError extends Error {
   }
 }
 
-// Verbatim, as provided — do not append additional accuracy rules or
-// preambles here. Only the schema JSON + final response-format line are
-// appended below, since the model still needs the field-name schema and
-// a plain-JSON-only instruction to satisfy the json_object response mode.
-const GENE_REPORT_PROMPT_BASE =
-  "Extract all data from this GenepoweRx genetic report PDF into the record_gene_report tool " +
-  "call, following the field names in the tool schema exactly (snake_case, matching " +
-  "genepowerx_report_extracted.json). Do NOT include the pharmacogenomics section — that is " +
-  "extracted separately. The uid is the Genomic Specimen ID printed on the report; if it is " +
-  "blank, use the patient name alone (do not invent a placeholder for a missing collection " +
-  "date). Preserve every condition, risk level, gene, and recommendation you find — do not " +
-  "summarize or drop rows. Do not fabricate the appendix/glossary reference tables — omit them " +
-  "if not asked. The report does not print a body system per condition, so classify each " +
-  "condition's body_system yourself using standard medical knowledge. care_plan is not a " +
-  "section of the report — synthesize it from the 'monitor X every Y' style actions already " +
-  "present in medical_recommendations and elsewhere, deduplicating repeated actions across " +
-  "conditions.";
+// Parses a genomic report PDF via OpenAI, validates the result, and upserts
+// it into `reports` keyed by uid. Shared by the manual upload route
+// (src/app/api/parse-pdf/route.ts) and the Google Drive ingestion pipeline
+// (src/app/api/drive/webhook, scripts/poll-drive.ts) so there is exactly one
+// place that defines how a PDF becomes a stored report.
+export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string }> {
+  const pdfBase64 = pdfBuffer.toString("base64");
 
-const PHARMACOGENOMICS_PROMPT_BASE =
-  "This report has a large Pharmacogenomics (PGx) section spanning many pages: a gene " +
-  "diplotype panel, then per-drug-class tables of individual drug rows (molecule class, drug " +
-  "name, level of evidence, response category/mechanism, clinical recommendation), then a " +
-  "therapeutic summary. Extract every single diplotype row and every single drug row into the " +
-  "record_pharmacogenomics tool call — there are typically 300+ drug rows across dozens of drug " +
-  "classes (antiplatelets, anticoagulants, antihypertensives, diabetic drugs, statins, PPIs, " +
-  "antiemetics, painkillers, asthma meds, anti-inflammatories, anti-epileptics, opioids, " +
-  "psychiatric drugs, antivirals, transplant drugs, etc.). Do not summarize, sample, or truncate " +
-  "the list — go through the PGx section class by class and row by row.";
-
-const GENE_REPORT_PROMPT = `${GENE_REPORT_PROMPT_BASE}
-
-Extract the data as JSON matching this schema:
-
-${JSON.stringify(GENE_REPORT_SCHEMA, null, 2)}
-
-Respond with ONLY the JSON object, no other text.`;
-
-const PHARMACOGENOMICS_PROMPT = `${PHARMACOGENOMICS_PROMPT_BASE}
-
-Extract the data as JSON matching this schema:
-
-${JSON.stringify(PHARMACOGENOMICS_SCHEMA, null, 2)}
-
-Respond with ONLY the JSON object, no other text.`;
-
-function parseJsonResponse(text: string | null | undefined): unknown {
-  if (!text) {
-    throw new IngestError("No text response from model", 502);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Defense in depth on top of the json_object response format below:
-    // strip markdown code fences some models still add, and fall back to
-    // the largest {...} substring if there's stray prose around the JSON.
-    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-    try {
-      return JSON.parse(stripped);
-    } catch {
-      const match = stripped.match(/\{[\s\S]*\}/);
-      if (!match) {
-        throw new IngestError("Model did not return valid JSON", 502);
-      }
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        throw new IngestError("Model did not return valid JSON", 502);
-      }
-    }
-  }
-}
-
-// Runs one PDF-vision extraction call with the given prompt and returns the
-// parsed JSON object.
-async function extract(pdfBase64: string, prompt: string): Promise<Record<string, unknown>> {
-  // IMPORTANT: these reports render some fields (e.g. the UID) as
-  // graphics/vector art with no corresponding text-layer content — a
-  // text-extraction pass over the PDF misses them entirely. Passing the
-  // PDF as an `input_file` makes the model read it via vision (each page
-  // rendered as an image internally), not just its text layer. Do not
-  // swap this for a text-only extraction path.
   const response = await getOpenAI().responses.create({
     model: MODEL,
-    // gpt-4o's output cap is 16384 tokens; raise this if OPENAI_MODEL is
-    // swapped for a model with a larger output limit.
     max_output_tokens: 16000,
-    // Forces valid JSON output. Without this, smaller models sometimes
-    // wrap the JSON in markdown code fences or add stray prose despite
-    // the prompt saying not to — this makes it a hard API-level guarantee
-    // instead of a request.
+    // Forces valid JSON output. Without this, some models wrap the JSON in
+    // markdown code fences or add stray prose despite the prompt saying not
+    // to — this makes it a hard API-level guarantee instead of a request.
     text: { format: { type: "json_object" } },
     input: [
       {
@@ -128,36 +52,48 @@ async function extract(pdfBase64: string, prompt: string): Promise<Record<string
             filename: "report.pdf",
             file_data: `data:application/pdf;base64,${pdfBase64}`,
           },
-          { type: "input_text", text: prompt },
+          {
+            type: "input_text",
+            text: `use this schema and extract the pdf into a json:\n\n${JSON.stringify(
+              REPORT_JSON_SCHEMA,
+              null,
+              2
+            )}\n\nRespond with ONLY the JSON object, no other text.`,
+          },
         ],
       },
     ],
   });
 
-  const parsed = parseJsonResponse(response.output_text);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new IngestError("Model did not return a JSON object", 502);
+  const text = response.output_text;
+  if (!text) {
+    throw new IngestError("No text response from model", 502);
   }
-  return parsed as Record<string, unknown>;
-}
 
-// Parses a genomic report PDF via two OpenAI calls (main report, then
-// pharmacogenomics separately), merges and validates the result, and
-// upserts it into `reports` keyed by uid. Shared by the manual upload
-// route (src/app/api/parse-pdf/route.ts) and the Google Drive ingestion
-// pipeline (src/app/api/drive/webhook, scripts/poll-drive.ts) so there is
-// exactly one place that defines how a PDF becomes a stored report.
-export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string }> {
-  const pdfBase64 = pdfBuffer.toString("base64");
+  let rawParsed: unknown;
+  try {
+    rawParsed = JSON.parse(text);
+  } catch {
+    // Defense in depth on top of the json_object response format above:
+    // strip markdown code fences some models still add, and fall back to
+    // the largest {...} substring if there's stray prose around the JSON.
+    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    try {
+      rawParsed = JSON.parse(stripped);
+    } catch {
+      const match = stripped.match(/\{[\s\S]*\}/);
+      if (!match) {
+        throw new IngestError("Model did not return valid JSON", 502);
+      }
+      try {
+        rawParsed = JSON.parse(match[0]);
+      } catch {
+        throw new IngestError("Model did not return valid JSON", 502);
+      }
+    }
+  }
 
-  const [mainData, pharmacogenomics] = await Promise.all([
-    extract(pdfBase64, GENE_REPORT_PROMPT),
-    extract(pdfBase64, PHARMACOGENOMICS_PROMPT),
-  ]);
-
-  const merged = { ...mainData, pharmacogenomics };
-
-  const validation = reportDataSchema.safeParse(merged);
+  const validation = reportDataSchema.safeParse(rawParsed);
   if (!validation.success) {
     throw new IngestError("Parsed JSON failed validation", 422, validation.error.issues);
   }
