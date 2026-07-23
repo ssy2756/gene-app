@@ -13,6 +13,13 @@ export function HealthRisksScreen({
   const [groupBy, setGroupBy] = useState<"system" | "risk">("system");
   const { conditions } = report;
 
+  const SYSTEM_COLORS: Record<string, string> = {
+    Cardiovascular: "#4e92a8",
+    Endocrine: "#e0a93d",
+    Neurological: "#4D3F9C",
+    Ophthalmic: "#29b6e8",
+  };
+
   const groupsBySystem = useMemo(() => {
     const map = new Map<string, typeof conditions>();
     for (const c of conditions) {
@@ -64,7 +71,14 @@ export function HealthRisksScreen({
           groupsBySystem.map(([system, items]) => (
             <div key={system} className="mb-4.5">
               <div className="mb-2 flex items-center gap-2">
-                <span className="text-[13px] font-bold">{system}</span>
+                <span
+                  className="h-[27px] w-6 flex-none"
+                  style={{
+                    background: SYSTEM_COLORS[system] ?? "#8a819c",
+                    clipPath: "polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)",
+                  }}
+                />
+                <span className="text-[13px] font-bold tracking-wide">{system}</span>
               </div>
               <div className="flex flex-col gap-2">
                 {items.map((c) => (

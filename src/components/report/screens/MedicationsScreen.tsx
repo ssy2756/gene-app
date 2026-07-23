@@ -13,7 +13,7 @@ export function MedicationsScreen({
   openDrug: (id: string) => void;
   goDiplotype: () => void;
 }) {
-  const { medications, home } = report;
+  const { medications } = report;
   const [query, setQuery] = useState("");
   const [system, setSystem] = useState("All");
 
@@ -28,9 +28,13 @@ export function MedicationsScreen({
       (!query || d.name.toLowerCase().includes(query.toLowerCase()) || d.gene.toLowerCase().includes(query.toLowerCase()))
   );
 
-  const directedPct = medications.length
-    ? Math.round(((medications.length - home.medsFlaggedCount) / medications.length) * 100)
-    : 0;
+  const total = medications.length;
+  const cautionCount = medications.filter((d) => d.statusKey === "caution").length;
+  const adjustCount = medications.filter((d) => d.statusKey === "adjust").length;
+  const directedCount = total - cautionCount - adjustCount;
+  const directedPct = total ? Math.round((directedCount / total) * 100) : 0;
+  const cautionPct = total ? Math.round((cautionCount / total) * 100) : 0;
+  const adjustPct = total ? Math.max(0, 100 - directedPct - cautionPct) : 0;
 
   return (
     <div className="pb-28">
@@ -39,9 +43,27 @@ export function MedicationsScreen({
         <div className="mt-0.5 text-[12.5px] text-[#8a819c]">How your genes affect {medications.length} drugs</div>
 
         {medications.length > 0 && (
-          <div className="mt-3.5 h-3 overflow-hidden rounded-md bg-[#eee6f2]">
-            <div className="h-full bg-[#2fa36b]" style={{ width: `${directedPct}%` }} />
-          </div>
+          <>
+            <div className="mt-3.5 flex h-3 overflow-hidden rounded-md bg-[#eee6f2]">
+              <div className="h-full bg-[#2fa36b]" style={{ width: `${directedPct}%` }} />
+              <div className="h-full bg-[#e0a93d]" style={{ width: `${cautionPct}%` }} />
+              <div className="h-full bg-[#d97b28]" style={{ width: `${adjustPct}%` }} />
+            </div>
+            <div className="mt-2.5 flex gap-3.5 text-[11px] text-[#8a819c]">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-sm bg-[#2fa36b]" />
+                {directedPct}% directed
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-sm bg-[#e0a93d]" />
+                {cautionPct}% caution
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-sm bg-[#d97b28]" />
+                {adjustPct}% adjust
+              </span>
+            </div>
+          </>
         )}
 
         <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-[#ece7f2] bg-white px-3.5 py-2.5">

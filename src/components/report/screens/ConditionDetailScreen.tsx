@@ -57,6 +57,12 @@ export function ConditionDetailScreen({
             <div className="flex-1 bg-[#d97b28]" />
             <div className="flex-1 bg-[#c0504a]" />
           </div>
+          <div className="relative h-0">
+            <div
+              className="absolute -top-4 h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-white shadow-[0_2px_5px_rgba(0,0,0,.15)]"
+              style={{ left: cond.gaugePct, border: `3px solid ${cond.color}` }}
+            />
+          </div>
           <div className="mt-4 flex justify-between text-[10.5px] text-[#9a8fb0]">
             <span>Low</span>
             <span>Mild</span>
