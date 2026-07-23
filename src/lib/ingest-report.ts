@@ -75,17 +75,74 @@ const GENE_REPORT_PROMPT_BASE =
   "valid, leave it with no items, never invent items to fill it.";
 
 const PHARMACOGENOMICS_PROMPT_BASE =
-  "This report has a large Pharmacogenomics (PGx) section spanning many pages of the document " +
-  "text below (OCR-extracted from the source PDF): a gene diplotype panel, then per-drug-class " +
-  "tables of individual drug rows (molecule class, drug name, level of evidence, response " +
-  "category/mechanism, clinical recommendation), then a therapeutic summary. The OCR text may " +
-  "contain minor recognition errors — use context to correct obvious ones. Extract every single " +
-  "diplotype row and every single drug row into JSON matching the schema given — there are " +
-  "typically 300+ drug rows across dozens of drug classes (antiplatelets, anticoagulants, " +
+  "The document text below is ONE PORTION (a page range) of a larger genetic report's " +
+  "Pharmacogenomics (PGx) section: a gene diplotype panel, then per-drug-class tables of " +
+  "individual drug rows (molecule class, drug name, level of evidence, response category/" +
+  "mechanism, clinical recommendation), then a therapeutic summary. The full PGx section can " +
+  "span 300+ drug rows across dozens of drug classes (antiplatelets, anticoagulants, " +
   "antihypertensives, diabetic drugs, statins, PPIs, antiemetics, painkillers, asthma meds, " +
   "anti-inflammatories, anti-epileptics, opioids, psychiatric drugs, antivirals, transplant " +
-  "drugs, etc.). Do not summarize, sample, or truncate the list — go through the PGx section " +
-  "class by class and row by row.";
+  "drugs, etc.) — but this call only covers the portion given below. The OCR text may contain " +
+  "minor recognition errors — use context to correct obvious ones. Extract every diplotype row " +
+  "and every drug row that actually appears in THIS portion of text — do not summarize, sample, " +
+  "or truncate. If this portion contains no PGx content at all (e.g. it's from a different part " +
+  "of the report), return empty arrays rather than inventing rows.";
+
+// The PGx section alone can hit 300+ drug rows, which overflows a single
+// response's output-token budget (DeepSeek truncates mid-array, producing
+// invalid JSON). Splitting the OCR'd document into page-range chunks and
+// running one pharmacogenomics extraction call per chunk (in parallel),
+// then merging, keeps each individual response small enough to finish.
+const PHARMACOGENOMICS_PAGES_PER_CHUNK = 15;
+
+function splitDocumentByPages(documentText: string, pagesPerChunk: number): string[] {
+  const pageBlocks = documentText.split(/(?=--- Page \d+ ---)/g).filter((b) => b.trim());
+  const chunks: string[] = [];
+  for (let i = 0; i < pageBlocks.length; i += pagesPerChunk) {
+    chunks.push(pageBlocks.slice(i, i + pagesPerChunk).join("\n\n"));
+  }
+  return chunks.length > 0 ? chunks : [documentText];
+}
+
+function dedupeKey(...parts: unknown[]): string {
+  return parts.map((p) => String(p ?? "").trim().toLowerCase()).join("|");
+}
+
+// Merges per-chunk pharmacogenomics extraction results into one object,
+// de-duplicating rows that inevitably appear in more than one chunk
+// (chunk boundaries don't align with drug-class table boundaries).
+function mergePharmacogenomics(chunks: Record<string, unknown>[]): Record<string, unknown> {
+  const diplotypesSeen = new Map<string, unknown>();
+  const drugsSeen = new Map<string, unknown>();
+  let summary: unknown;
+
+  for (const chunk of chunks) {
+    const diplotypes = Array.isArray(chunk.diplotypes) ? chunk.diplotypes : [];
+    for (const d of diplotypes) {
+      if (d && typeof d === "object") {
+        const key = dedupeKey((d as Record<string, unknown>).gene);
+        if (key && !diplotypesSeen.has(key)) diplotypesSeen.set(key, d);
+      }
+    }
+    const drugs = Array.isArray(chunk.drug_recommendations) ? chunk.drug_recommendations : [];
+    for (const d of drugs) {
+      if (d && typeof d === "object") {
+        const rec = d as Record<string, unknown>;
+        const key = dedupeKey(rec.molecule_class, rec.drug);
+        if (key && !drugsSeen.has(key)) drugsSeen.set(key, d);
+      }
+    }
+    if (!summary && chunk.summary && typeof chunk.summary === "object" && Object.keys(chunk.summary).length > 0) {
+      summary = chunk.summary;
+    }
+  }
+
+  return {
+    diplotypes: [...diplotypesSeen.values()],
+    drug_recommendations: [...drugsSeen.values()],
+    summary: summary ?? {},
+  };
+}
 
 function buildPrompt(base: string, schema: object, documentText: string): string {
   return `${base}
@@ -161,12 +218,16 @@ async function extract(label: string, prompt: string): Promise<Record<string, un
 // PDF becomes a stored report.
 export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string }> {
   const documentText = await extractPdfTextViaOcr(pdfBuffer);
+  const pharmacogenomicsChunks = splitDocumentByPages(documentText, PHARMACOGENOMICS_PAGES_PER_CHUNK);
 
-  const [mainData, pharmacogenomics] = await Promise.all([
+  const [mainData, ...pharmacogenomicsResults] = await Promise.all([
     extract("gene_report", buildPrompt(GENE_REPORT_PROMPT_BASE, GENE_REPORT_SCHEMA, documentText)),
-    extract("pharmacogenomics", buildPrompt(PHARMACOGENOMICS_PROMPT_BASE, PHARMACOGENOMICS_SCHEMA, documentText)),
+    ...pharmacogenomicsChunks.map((chunk, i) =>
+      extract(`pharmacogenomics[${i}]`, buildPrompt(PHARMACOGENOMICS_PROMPT_BASE, PHARMACOGENOMICS_SCHEMA, chunk))
+    ),
   ]);
 
+  const pharmacogenomics = mergePharmacogenomics(pharmacogenomicsResults);
   const merged = { ...mainData, pharmacogenomics };
 
   const validation = reportDataSchema.safeParse(merged);
