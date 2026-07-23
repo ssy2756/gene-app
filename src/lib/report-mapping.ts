@@ -323,6 +323,13 @@ function mapVitamins(raw: RawReport): VitaminTierView[] {
     return [...groups.entries()].map(([tier, items]) => ({ tier, color: tierColor(tier), items }));
   }
   if (isRecord(vm)) {
+    // A generic "items"/"list" key means an untiered flat list, not a real
+    // tier name — group those under "General" instead of a tier literally
+    // called "Items".
+    const genericKey = ["items", "list", "vitamins", "nutrients"].find((k) => Array.isArray(vm[k]));
+    if (genericKey) {
+      return [{ tier: "General", color: tierColor("General"), items: (vm[genericKey] as unknown[]).map(mapVitaminItem) }];
+    }
     return Object.entries(vm)
       .filter(([, v]) => Array.isArray(v))
       .map(([tier, v]) => ({
@@ -342,16 +349,28 @@ export type SensitivityView = {
   text: string;
 };
 
+// Flattens a per-item "recommendations" field into a string array, whether
+// it's already an array of strings, an array of objects, or a single string.
+function flattenRecommendations(v: unknown): string[] {
+  if (Array.isArray(v)) {
+    return v.map((r) => (isRecord(r) ? str(pick(r, ["recommendation", "narrative", "note", "text"]), "") : str(r))).filter(Boolean);
+  }
+  if (typeof v === "string" && v) return [v];
+  return [];
+}
+
 function mapSensitivities(raw: RawReport): SensitivityView[] {
   const fn = raw.fitness_and_nutrigenomics;
   const list = asArray(isRecord(fn) ? fn.food_sensitivity : undefined).filter(isRecord);
   return list.map((s) => {
-    const riskKey = normalizeRiskKey(pick(s, ["risk", "level"]));
+    const riskKey = normalizeRiskKey(pick(s, ["risk", "level", "risk_level"]));
     const style = RISK_STYLES[riskKey];
     return {
-      name: str(pick(s, ["name", "food"]), "—"),
-      gene: str(pick(s, ["gene"]), ""),
-      level: str(pick(s, ["level", "result"]), style.label),
+      // Real reports label each sensitivity via "type" (e.g. "Lactose
+      // Intolerance"), not "name"/"food" — check that first.
+      name: str(pick(s, ["type", "name", "food"]), "—"),
+      gene: str(pick(s, ["gene", "narrative"]), ""),
+      level: str(pick(s, ["level", "result", "risk_level"]), riskKey === "unknown" ? "" : style.label),
       bg: style.bg,
       text: style.text,
     };
@@ -361,11 +380,25 @@ function mapSensitivities(raw: RawReport): SensitivityView[] {
 function mapFitness(raw: RawReport): { headline: string; sub: string; tips: string[] } {
   const fn = raw.fitness_and_nutrigenomics;
   const musculo = isRecord(fn) ? fn.musculoskeletal : undefined;
-  const metabolism = asArray(isRecord(fn) ? fn.metabolism : undefined);
+  const metabolism = asArray(isRecord(fn) ? fn.metabolism : undefined).filter(isRecord);
+  const musculoTips = flattenRecommendations(isRecord(musculo) ? musculo.recommendations : undefined);
+  const metabolismTips = metabolism.flatMap((m) => {
+    const own = flattenRecommendations(m.recommendations);
+    if (own.length) return own;
+    // Fall back to the item's own narrative/type if it has no
+    // recommendations array of its own.
+    const fallback = str(pick(m, ["recommendation", "narrative", "note"]), "");
+    return fallback ? [fallback] : [];
+  });
+  // Real reports describe the musculoskeletal profile via "narrative"/
+  // "risk_level" only, no dedicated headline field — use the risk_level as
+  // a short label and the narrative as the supporting detail line.
+  const risk = str(pick(musculo, ["risk_level", "level"]), "");
+  const narrative = str(pick(musculo, ["narrative", "detail", "genes"]), "");
   return {
-    headline: str(pick(musculo, ["profile", "type", "summary"]), "Fitness profile"),
-    sub: str(pick(musculo, ["detail", "genes"]), ""),
-    tips: metabolism.map((m) => (isRecord(m) ? str(pick(m, ["recommendation", "narrative", "note"]), str(m)) : str(m))).filter(Boolean),
+    headline: str(pick(musculo, ["profile", "type"]), risk || "Fitness profile"),
+    sub: narrative,
+    tips: [...musculoTips, ...metabolismTips],
   };
 }
 
