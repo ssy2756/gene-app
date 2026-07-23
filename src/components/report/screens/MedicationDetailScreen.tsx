@@ -64,33 +64,6 @@ export function MedicationDetailScreen({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2.5 rounded-2xl bg-white p-3.5 text-[13px] shadow-[0_2px_8px_rgba(58,47,136,.05)]">
-          <div>
-            <div className="text-[11px] text-[#9a8fb0]">Gene</div>
-            <div className="cursor-pointer font-mono font-semibold text-[#3A2F88]" onClick={() => onDefine(drug.gene)}>
-              {drug.gene}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] text-[#9a8fb0]">Diplotype</div>
-            <div className="cursor-pointer font-mono font-semibold text-[#3A2F88]" onClick={() => onDefine("Diplotype")}>
-              {drug.diplotype}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] text-[#9a8fb0]">Phenotype</div>
-            <div className="cursor-pointer font-semibold text-[#3A2F88]" onClick={() => onDefine(drug.phenotype)}>
-              {drug.phenotype}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] text-[#9a8fb0]">Evidence</div>
-            <div className="cursor-pointer font-semibold text-[#3A2F88]" onClick={() => onDefine("Evidence level")}>
-              {drug.evidence}
-            </div>
-          </div>
-        </div>
-
         <div className="mt-4 text-sm font-bold">Recommendation notes</div>
         <div className="mt-1.5 text-[13.5px] leading-relaxed text-[#524a66]">
           <TapDefine text={drug.recommendation} terms={glossaryTerms} onDefine={onDefine} />
