@@ -4,7 +4,12 @@ const nextConfig: NextConfig = {
   // These ship native/prebuilt binaries (canvas rendering, PDF parsing,
   // OCR WASM+worker files) that must not be webpack/turbopack-bundled —
   // they need to load from node_modules as-is at runtime.
-  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js"],
+  // @tesseract.js-data/eng's index.js computes its langPath via
+  // `path.join(__dirname, "4.0.0")` — bundling it rewrites that __dirname
+  // reference to a build-time placeholder ("/ROOT/...") that isn't valid
+  // at runtime, breaking the trained-data file lookup. Marking it external
+  // keeps that path resolution literal/correct.
+  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js", "@tesseract.js-data/eng"],
   // Belt-and-suspenders alongside the explicit import in pdf-ocr.ts: force
   // these dynamically-loaded runtime files (pdfjs's worker, tesseract's
   // WASM core/worker, the bundled trained-data file) into the deployed
