@@ -87,7 +87,11 @@ export async function extractPdfTextViaOcr(pdfBuffer: Buffer): Promise<string> {
     await Promise.all(pool.map(runWorker));
     return pageTexts.join("\n\n");
   } finally {
+    // Not calling doc.destroy() here: it's not required for correctness in
+    // a one-shot serverless invocation (the process tears down right
+    // after), and it threw "destroy is not a function" in production —
+    // the legacy Node build's document proxy apparently doesn't expose it
+    // the same way the typed API declares.
     await Promise.all(pool.map((w) => w.terminate()));
-    await doc.destroy();
   }
 }
