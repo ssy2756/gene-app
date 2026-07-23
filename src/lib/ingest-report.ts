@@ -246,7 +246,16 @@ async function extract(label: string, prompt: string): Promise<Record<string, un
 // Google Drive ingestion pipeline (src/app/api/drive/webhook,
 // scripts/poll-drive.ts) so there is exactly one place that defines how a
 // PDF becomes a stored report.
-export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string }> {
+//
+// expectedUid: the "UID - <value>" line is rendered as vector art, not
+// real text, and OCR reads it correctly on some passes but not others —
+// when it misreads, the model falls back to the patient-name rule and
+// silently writes a new row under the wrong key instead of updating the
+// intended one. When the caller already knows the uid (reparsing an
+// existing report), pass it here to use directly instead of trusting
+// extraction — sidesteps the OCR reliability problem entirely for that
+// case. Only a first-time Drive-triggered ingest has no expected uid.
+export async function ingestReportPdf(pdfBuffer: Buffer, expectedUid?: string): Promise<{ uid: string }> {
   const documentText = await extractPdfTextViaOcr(pdfBuffer);
   const pharmacogenomicsChunks = splitDocumentByPages(documentText, PHARMACOGENOMICS_PAGES_PER_CHUNK);
 
@@ -274,7 +283,8 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
     throw new IngestError("Parsed JSON failed validation", 422, validation.error.issues);
   }
 
-  const { uid, ...data } = validation.data;
+  const { uid: extractedUid, ...data } = validation.data;
+  const uid = expectedUid ?? extractedUid;
 
   await sql`
     INSERT INTO reports (uid, data, updated_at)

@@ -38,7 +38,7 @@ async function handle(request: NextRequest) {
 
   try {
     const buffer = await downloadFile(row.drive_file_id);
-    const result = await ingestReportPdf(buffer);
+    const result = await ingestReportPdf(buffer, uid);
     return NextResponse.json({ ok: true, uid: result.uid });
   } catch (err) {
     if (err instanceof IngestError) {
