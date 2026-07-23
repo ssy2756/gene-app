@@ -386,18 +386,33 @@ export type CarePlanConditionView = {
   checks: CarePlanCheckView[];
 };
 
+// Category badge colors lifted directly from the mockup's care-plan icon map
+// (cv/endo/nutri/pgx) — kept independent of risk-level color so a low-risk
+// condition's care items don't look "green/safe" out of context.
+const CARE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
+  Cardiovascular: { bg: "#e8eef2", text: "#4e92a8" },
+  Endocrine: { bg: "#fbf1d8", text: "#a67a12" },
+  Metabolic: { bg: "#e3f3ea", text: "#1f7d54" },
+  Neurological: { bg: "#f3eef9", text: "#4D3F9C" },
+  Ophthalmic: { bg: "#e8eef2", text: "#4e92a8" },
+};
+const CARE_BADGE_DEFAULT = { bg: "#f0ecf4", text: "#6a6478" };
+
 function mapCarePlan(conditions: ConditionView[]): CarePlanConditionView[] {
   return conditions
     .filter((c) => c.recommendations.length > 0)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      badge: c.name.slice(0, 2).toUpperCase(),
-      color: c.color,
-      bg: c.bg,
-      text: c.text,
-      checks: c.recommendations.map((r) => ({ reason: r, cadence: extractCadence(r) })),
-    }));
+    .map((c) => {
+      const badgeColor = CARE_BADGE_COLORS[c.system] ?? CARE_BADGE_DEFAULT;
+      return {
+        id: c.id,
+        name: c.name,
+        badge: c.name.slice(0, 2).toUpperCase(),
+        color: badgeColor.text,
+        bg: badgeColor.bg,
+        text: badgeColor.text,
+        checks: c.recommendations.map((r) => ({ reason: r, cadence: extractCadence(r) })),
+      };
+    });
 }
 
 // ---------- home summary ----------
