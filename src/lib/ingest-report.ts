@@ -106,6 +106,25 @@ const PHARMACOGENOMICS_PROMPT_BASE =
 // pages/chunk trades more parallel calls for a much safer per-call margin.
 const PHARMACOGENOMICS_PAGES_PER_CHUNK = 6;
 
+// Firing all ~11 chunk calls at once risks provider-side throttling
+// (queued/serialized requests) stalling the whole batch past the route's
+// 300s ceiling. Capping concurrency keeps a bounded number in flight at
+// once — still parallel, just not an unbounded burst.
+const PHARMACOGENOMICS_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 function splitDocumentByPages(documentText: string, pagesPerChunk: number): string[] {
   const pageBlocks = documentText.split(/(?=--- Page \d+ ---)/g).filter((b) => b.trim());
   const chunks: string[] = [];
@@ -231,9 +250,9 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
   const documentText = await extractPdfTextViaOcr(pdfBuffer);
   const pharmacogenomicsChunks = splitDocumentByPages(documentText, PHARMACOGENOMICS_PAGES_PER_CHUNK);
 
-  const [mainData, ...pharmacogenomicsResults] = await Promise.all([
+  const [mainData, pharmacogenomicsResults] = await Promise.all([
     extract("gene_report", buildPrompt(GENE_REPORT_PROMPT_BASE, GENE_REPORT_SCHEMA, documentText)),
-    ...pharmacogenomicsChunks.map((chunk, i) =>
+    mapWithConcurrency(pharmacogenomicsChunks, PHARMACOGENOMICS_CONCURRENCY, (chunk, i) =>
       extract(`pharmacogenomics[${i}]`, buildPrompt(PHARMACOGENOMICS_PROMPT_BASE, PHARMACOGENOMICS_SCHEMA, chunk))
     ),
   ]);

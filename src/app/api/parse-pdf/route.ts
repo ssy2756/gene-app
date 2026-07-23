@@ -7,7 +7,7 @@ import { ingestReportPdf, IngestError } from "@/lib/ingest-report";
 // /api/drive/webhook. This route previously had no maxDuration set at
 // all (silently capped at the platform default), which would have timed
 // out long before ingestReportPdf finished.
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   const token = request.cookies.get(sessionCookieName)?.value;

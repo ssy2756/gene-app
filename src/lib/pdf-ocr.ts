@@ -41,9 +41,11 @@ const OCR_CONCURRENCY = 6;
 async function renderPageToPng(doc: any, pageNum: number): Promise<Buffer> {
   const canvasFactory = new NodeCanvasFactory();
   const page = await doc.getPage(pageNum);
-  // 2x scale: PDF default is 72 DPI, this renders at ~144 DPI, which OCR
-  // needs for small body text to come out accurately.
-  const viewport = page.getViewport({ scale: 2.0 });
+  // 1.6x scale: PDF default is 72 DPI, this renders at ~115 DPI — still
+  // enough resolution for OCR to read normal body text accurately, but
+  // faster to render and recognize than 2.0x. Matters here because the
+  // whole route has to fit inside Vercel's 300s Hobby-plan ceiling.
+  const viewport = page.getViewport({ scale: 1.6 });
   const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
   await page.render({ canvasContext: context, viewport, canvasFactory }).promise;
   const pngBuffer = canvas.toBuffer("image/png");
