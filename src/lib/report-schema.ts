@@ -122,7 +122,7 @@ export const REPORT_JSON_SCHEMA = {
     vitamins_and_minerals: {
       type: "object",
       description:
-        "Every INDIVIDUAL vitamin/mineral/nutrient recommendation on the vitamins & minerals pages, as a line-item list — NOT a paragraph summary. A single 'summary' string is not an acceptable substitute even if the page also contains introductory prose; extract the itemized data underneath it. Either shape is acceptable: a flat array of {name, tier, why, dose} objects (property name e.g. \"items\"), or an object keyed by tier (e.g. Essential/Advised/Optional) whose values are arrays of {name, why, dose} objects — use whichever shape matches how the document itself groups them, but every named vitamin/mineral/nutrient on the page MUST appear as its own object with at least a name and dose.",
+        "Every INDIVIDUAL vitamin/mineral/nutrient recommendation on the vitamins & minerals pages, as a line-item list — NOT a paragraph summary. A single 'summary' string is not an acceptable substitute even if the page also contains introductory prose; extract the itemized data underneath it. Either shape is acceptable: a flat array of {name, tier, why, dose} objects (property name e.g. \"items\"), or an object keyed by tier whose values are arrays of {name, why, dose} objects — use whichever shape matches how the document itself groups them. Tier names (if any) must be the literal label printed on the page for each item, verified visually — do not assume a fixed 'Essential/Advised/Optional' scheme; many documents use different tier names or no tiers at all. Every named vitamin/mineral/nutrient on the page MUST appear as its own object with at least a name and dose.",
     },
     methylation: {
       type: "object",
