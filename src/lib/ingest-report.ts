@@ -1,6 +1,26 @@
 import OpenAI from "openai";
+import type { Response } from "openai/resources/responses/responses";
 import { sql } from "@/lib/db";
 import { REPORT_JSON_SCHEMA, reportDataSchema } from "@/lib/report-schema";
+
+// Diagnostic logging for the "Model did not return valid JSON" failure —
+// most commonly caused by hitting max_output_tokens mid-object (the
+// response gets cut off, so it's well-formed-looking but incomplete JSON).
+// Vercel truncates long log lines, so this logs the status/incomplete
+// reason plus just the tail of the text (where truncation would show).
+function logInvalidJson(response: Response, text: string) {
+  console.error(
+    "Ingest: invalid JSON from model.",
+    "status:",
+    response.status,
+    "incomplete_details:",
+    response.incomplete_details,
+    "output length (chars):",
+    text.length,
+    "last 500 chars:",
+    text.slice(-500)
+  );
+}
 
 // Lazily constructed on first use, not at module load: the OpenAI SDK throws
 // immediately if no API key is available, and Next.js evaluates route
@@ -83,11 +103,13 @@ export async function ingestReportPdf(pdfBuffer: Buffer): Promise<{ uid: string 
     } catch {
       const match = stripped.match(/\{[\s\S]*\}/);
       if (!match) {
+        logInvalidJson(response, text);
         throw new IngestError("Model did not return valid JSON", 502);
       }
       try {
         rawParsed = JSON.parse(match[0]);
       } catch {
+        logInvalidJson(response, text);
         throw new IngestError("Model did not return valid JSON", 502);
       }
     }
