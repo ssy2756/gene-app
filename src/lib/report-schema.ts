@@ -118,19 +118,9 @@ export const REPORT_JSON_SCHEMA = {
       },
     },
     vitamins_and_minerals: {
-      type: "array",
+      type: "object",
       description:
-        "Every vitamin/mineral/nutrient recommendation on the vitamins & minerals pages — do not omit or summarize.",
-      items: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          tier: { type: ["string", "null"] },
-          why: { type: "string" },
-          dose: { type: "string" },
-        },
-        required: ["name"],
-      },
+        "Every vitamin/mineral/nutrient recommendation on the vitamins & minerals pages — do not omit or summarize. Either shape is acceptable: a flat array of {name, tier, why, dose} objects, or an object keyed by tier (e.g. Essential/Advised/Optional) whose values are arrays of {name, why, dose} objects — use whichever shape matches how the document itself groups them.",
     },
     methylation: {
       type: "object",
@@ -161,8 +151,8 @@ export const REPORT_JSON_SCHEMA = {
           items: {
             type: "object",
             properties: {
-              drug: { type: "string" },
               molecule_class: { type: "string" },
+              drug: { type: "string" },
               gene: { type: "string" },
               diplotype: { type: "string" },
               phenotype: { type: "string" },
@@ -184,7 +174,10 @@ export const REPORT_JSON_SCHEMA = {
       type: "object",
       properties: {
         glossary: { type: "object" },
-        acmg_reference: { type: "string" },
+        acmg_reference: {
+          type: "string",
+          description: "Static boilerplate reference text (e.g. ACMG classification note) — copy verbatim if present, do not summarize.",
+        },
         biomarkers_by_condition: { type: "object" },
         references: { type: "array", items: { type: "object" } },
       },
