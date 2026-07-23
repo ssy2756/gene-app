@@ -68,10 +68,13 @@ const GENE_REPORT_PROMPT_BASE =
   "Recommendations' or 'Diet and Nutrition'. 'food_sensitivity' must come from the separate " +
   "'Your Metabolism' section — this is a different section from Exercise, do not confuse them, " +
   "and food_sensitivity must not be left empty if that section exists. For " +
-  "'vitamins_and_minerals': extract the itemized list under the 'Vitamins and Minerals " +
-  "Summary' page as individual items, each with the tier label exactly as printed and verified " +
-  "visually against the page layout — do not assign tiers by list position or by what tier " +
-  "seems typical, and do not invent items for a tier that is empty on the page.";
+  "'vitamins_and_minerals' MUST be a JSON array directly (e.g. \"vitamins_and_minerals\": " +
+  "[{...}, {...}]) — do NOT wrap it in an object with an 'items'/'list' key. Extract the " +
+  "itemized list under the 'Vitamins and Minerals Summary' page as individual items; EVERY " +
+  "item MUST include a non-empty 'tier' field with the tier label exactly as printed above/" +
+  "around it on the page, verified visually against the page layout — do not assign tiers by " +
+  "list position or by what tier seems typical, and do not invent items for a tier that is " +
+  "empty on the page, but never omit the 'tier' field itself for an item that does have one.";
 
 const PHARMACOGENOMICS_PROMPT_BASE =
   "This report has a large Pharmacogenomics (PGx) section spanning many pages: a gene " +
