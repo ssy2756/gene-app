@@ -74,7 +74,13 @@ const GENE_REPORT_PROMPT_BASE =
   "appear in the text with zero items listed after it before the next tier label — that is " +
   "valid, leave it with no items, never invent items to fill it. Do NOT add a placeholder item " +
   "(e.g. name 'None'/'N/A'/'-') for an empty tier — an empty tier means zero objects in the " +
-  "array for that tier, not one object representing emptiness.";
+  "array for that tier, not one object representing emptiness. IMPORTANT: the OCR frequently " +
+  "inserts a stray single-character noise line (e.g. a lone 'E') right after a tier header — " +
+  "this is OCR misreading a decorative icon/graphic near the header, NOT a real line of text and " +
+  "NOT part of that tier's item list. Skip any such stray single-character or clearly-garbled " +
+  "line when deciding what belongs to a tier; only real named vitamin/mineral items (with a name " +
+  "and, usually, a dose in parentheses) count as items. Read past that noise to find the true " +
+  "next tier header or the first real item line before assigning anything.";
 
 const PHARMACOGENOMICS_PROMPT_BASE =
   "The document text below is ONE PORTION (a page range) of a larger genetic report's " +
