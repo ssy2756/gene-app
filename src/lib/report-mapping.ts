@@ -164,7 +164,7 @@ function mapConditions(raw: RawReport): ConditionView[] {
     merged.push({
       id: slugify(name),
       name,
-      system: str(pick(o, ["system", "category"]), "General"),
+      system: str(pick(o, ["body_system", "system", "category"]) ?? pick(rec, ["body_system"]), "General"),
       tag: str(pick(o, ["tag"]), ""),
       riskKey,
       riskLabel: style.label,
@@ -190,7 +190,7 @@ function mapConditions(raw: RawReport): ConditionView[] {
     merged.push({
       id: slugify(name),
       name,
-      system: "General",
+      system: str(pick(r, ["body_system"]), "General"),
       tag: "",
       riskKey,
       riskLabel: style.label,
@@ -458,11 +458,51 @@ const CARE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
 };
 const CARE_BADGE_DEFAULT = { bg: "#f0ecf4", text: "#6a6478" };
 
-function mapCarePlan(conditions: ConditionView[]): CarePlanConditionView[] {
+function badgeFor(system: string) {
+  return CARE_BADGE_COLORS[system] ?? CARE_BADGE_DEFAULT;
+}
+
+function mapCarePlan(conditions: ConditionView[], raw: RawReport): CarePlanConditionView[] {
+  // Prefer the model's own synthesized care_plan (deduplicated across
+  // conditions) when present; fall back to deriving it from each
+  // condition's recommendations, as before, when the model didn't
+  // produce one.
+  const llmCarePlan = asArray(raw.care_plan).filter(isRecord);
+  if (llmCarePlan.length > 0) {
+    const byCondition = new Map<string, { condition: ConditionView | undefined; checks: CarePlanCheckView[] }>();
+    for (const item of llmCarePlan) {
+      const conditionName = str(pick(item, ["condition"]), "General");
+      const key = conditionName.trim().toLowerCase();
+      const match = conditions.find((c) => c.name.trim().toLowerCase() === key);
+      const entry = byCondition.get(key) ?? { condition: match, checks: [] };
+      const action = str(pick(item, ["action"]), "");
+      if (action) {
+        entry.checks.push({ reason: action, cadence: str(pick(item, ["cadence"]), extractCadence(action)) });
+      }
+      byCondition.set(key, entry);
+    }
+    return [...byCondition.entries()]
+      .filter(([, v]) => v.checks.length > 0)
+      .map(([key, v]) => {
+        const name = v.condition?.name ?? key;
+        const system = v.condition?.system ?? "General";
+        const badgeColor = badgeFor(system);
+        return {
+          id: v.condition?.id ?? slugify(name),
+          name,
+          badge: name.slice(0, 2).toUpperCase(),
+          color: badgeColor.text,
+          bg: badgeColor.bg,
+          text: badgeColor.text,
+          checks: v.checks,
+        };
+      });
+  }
+
   return conditions
     .filter((c) => c.recommendations.length > 0)
     .map((c) => {
-      const badgeColor = CARE_BADGE_COLORS[c.system] ?? CARE_BADGE_DEFAULT;
+      const badgeColor = badgeFor(c.system);
       return {
         id: c.id,
         name: c.name,
@@ -532,7 +572,7 @@ export function mapReportForDisplay(uid: string, raw: RawReport): DisplayReport 
     vitamins: mapVitamins(raw),
     sensitivities: mapSensitivities(raw),
     fitness: mapFitness(raw),
-    carePlan: mapCarePlan(conditions),
+    carePlan: mapCarePlan(conditions, raw),
     home: mapHomeSummary(conditions, medications),
   };
 }

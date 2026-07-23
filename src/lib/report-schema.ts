@@ -1,17 +1,18 @@
 import { z } from "zod";
 
-// Shape of the JSON Claude should extract from a GenepoweRx-style genomic
-// report PDF. Derived from the schema file the user provided plus the
-// `uid` field confirmed on page 1 of the sample report (a standalone
-// "UID - <number>" line under Name/Age/Gender — it is NOT the same as the
-// "Genomic Specimen ID" table row, which is typically blank).
-export const REPORT_JSON_SCHEMA = {
+// Extraction is split into two separate LLM calls (see ingest-report.ts):
+// GENE_REPORT_SCHEMA for everything except pharmacogenomics, and
+// PHARMACOGENOMICS_SCHEMA on its own — the pharmacogenomics section alone
+// commonly spans 300+ individual drug rows across dozens of drug classes,
+// which risks truncation/under-extraction if crammed into the same
+// response as everything else.
+export const GENE_REPORT_SCHEMA = {
   type: "object",
   properties: {
     uid: {
       type: "string",
       description:
-        "The report's unique identifier, found on page 1 as a standalone 'UID - <value>' line directly below the Name/Age/Gender row. Do not confuse this with 'Genomic Specimen ID' under Sample Details, which is a different (often blank) field.",
+        "The report's unique identifier: the Genomic Specimen ID printed on the report. If it is blank, use the patient name alone instead — never invent a placeholder value.",
     },
     patient_information: {
       type: "object",
@@ -51,6 +52,11 @@ export const REPORT_JSON_SCHEMA = {
           genes_analyzed: { type: ["number", "null"] },
           risk_level: { type: ["string", "null"] },
           description: { type: "string" },
+          body_system: {
+            type: "string",
+            description:
+              "The report does not print a body system per condition — classify it yourself using standard medical knowledge (e.g. Cardiovascular, Endocrine, Neurological, Ophthalmic, Metabolic, Gastrointestinal, etc.).",
+          },
         },
         required: ["condition"],
       },
@@ -64,8 +70,26 @@ export const REPORT_JSON_SCHEMA = {
           risk_level: { type: ["string", "null"] },
           narrative: { type: "string" },
           recommendations: { type: "array", items: { type: "string" } },
+          body_system: {
+            type: "string",
+            description: "Same body-system classification as condition_risk_overview for this same condition — keep it consistent across both.",
+          },
         },
         required: ["condition"],
+      },
+    },
+    care_plan: {
+      type: "array",
+      description:
+        "care_plan is NOT a section printed in the report — synthesize it yourself from the 'monitor X every Y' style monitoring/follow-up actions already present in medical_recommendations (and elsewhere in the extracted data). Deduplicate repeated actions that appear across multiple conditions (e.g. the same lab test recommended for two different conditions should appear once, not twice).",
+      items: {
+        type: "object",
+        properties: {
+          condition: { type: "string" },
+          action: { type: "string" },
+          cadence: { type: "string" },
+        },
+        required: ["action"],
       },
     },
     immune_health: {
@@ -131,46 +155,6 @@ export const REPORT_JSON_SCHEMA = {
         recommendations: { type: "array", items: { type: "string" } },
       },
     },
-    pharmacogenomics: {
-      type: "object",
-      properties: {
-        diplotypes: {
-          type: "array",
-          description: "Every gene tested in the diplotype panel — do not omit any.",
-          items: {
-            type: "object",
-            properties: {
-              gene: { type: "string" },
-              diplotype: { type: "string" },
-              phenotype: { type: "string" },
-            },
-          },
-        },
-        drug_recommendations: {
-          type: "array",
-          description:
-            "EVERY individual drug/medication card in the pharmacogenomics section — there are typically 10+ drugs, do not sample a subset.",
-          items: {
-            type: "object",
-            properties: {
-              molecule_class: { type: "string" },
-              drug: { type: "string" },
-              gene: { type: "string" },
-              diplotype: { type: "string" },
-              phenotype: { type: "string" },
-              status: {
-                type: "string",
-                description: "e.g. 'Use as Directed', 'Use with Caution', 'Adjust Dose', 'Not Enough Evidence'",
-              },
-              evidence_level: { type: "string" },
-              recommendation: { type: "string" },
-            },
-            required: ["drug"],
-          },
-        },
-        summary: { type: "object" },
-      },
-    },
     diet_plan: { type: "array", items: { type: "object" } },
     appendix: {
       type: "object",
@@ -186,6 +170,56 @@ export const REPORT_JSON_SCHEMA = {
     },
   },
   required: ["uid", "patient_information"],
+  additionalProperties: true,
+} as const;
+
+// Extracted in its own call — see GENE_REPORT_SCHEMA's header comment for
+// why. This section alone commonly has 300+ individual drug rows across
+// dozens of drug classes (antiplatelets, anticoagulants, antihypertensives,
+// diabetic drugs, statins, PPIs, antiemetics, painkillers, asthma meds,
+// anti-inflammatories, anti-epileptics, opioids, psychiatric drugs,
+// antivirals, transplant drugs, etc.) — a gene diplotype panel, then
+// per-drug-class tables of individual drug rows, then a therapeutic
+// summary.
+export const PHARMACOGENOMICS_SCHEMA = {
+  type: "object",
+  properties: {
+    diplotypes: {
+      type: "array",
+      description: "Every gene tested in the diplotype panel — do not omit any.",
+      items: {
+        type: "object",
+        properties: {
+          gene: { type: "string" },
+          diplotype: { type: "string" },
+          phenotype: { type: "string" },
+        },
+      },
+    },
+    drug_recommendations: {
+      type: "array",
+      description:
+        "EVERY individual drug row across every drug class in the pharmacogenomics section — typically 300+ rows across dozens of classes. Do not summarize, sample, or truncate the list; go through the section class by class and row by row.",
+      items: {
+        type: "object",
+        properties: {
+          molecule_class: { type: "string" },
+          drug: { type: "string" },
+          gene: { type: "string" },
+          diplotype: { type: "string" },
+          phenotype: { type: "string" },
+          status: {
+            type: "string",
+            description: "e.g. 'Use as Directed', 'Use with Caution', 'Adjust Dose', 'Not Enough Evidence'",
+          },
+          evidence_level: { type: "string" },
+          recommendation: { type: "string" },
+        },
+        required: ["drug"],
+      },
+    },
+    summary: { type: "object" },
+  },
   additionalProperties: true,
 } as const;
 
