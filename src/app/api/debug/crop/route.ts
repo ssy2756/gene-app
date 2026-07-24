@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
   const returnFull = request.nextUrl.searchParams.get("full") === "1";
   if (returnFull) {
-    return new NextResponse(Buffer.from(pngBuffer), { headers: { "Content-Type": "image/png" } });
+    return NextResponse.json({ imageBase64: Buffer.from(pngBuffer).toString("base64") });
   }
 
   const canvas = createCanvas(img.width, cropHeight);
@@ -61,5 +61,5 @@ export async function GET(request: NextRequest) {
   ctx.drawImage(img, 0, -pxTop);
   const cropBuffer = await canvas.encode("png");
 
-  return new NextResponse(Buffer.from(cropBuffer), { headers: { "Content-Type": "image/png" } });
+  return NextResponse.json({ imageBase64: Buffer.from(cropBuffer).toString("base64") });
 }
