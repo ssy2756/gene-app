@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { sql } from "@/lib/db";
 import { extractPdfTextViaOcr } from "@/lib/pdf-ocr";
 import { GENE_REPORT_SCHEMA, PHARMACOGENOMICS_SCHEMA, reportDataSchema } from "@/lib/report-schema";
+import { parseVitaminsSection } from "@/lib/vitamins-parser";
 
 // DeepSeek's API is OpenAI-SDK-compatible (chat completions), just served
 // from a different base URL — no vision/file input support, hence the OCR
@@ -270,10 +271,20 @@ export async function ingestReportPdf(pdfBuffer: Buffer, expectedUid?: string): 
   ]);
 
   const pharmacogenomics = mergePharmacogenomics(pharmacogenomicsResults);
-  if (Array.isArray(mainData.vitamins_and_minerals)) {
-    // Defense in depth: the model has occasionally added a placeholder
-    // item (name "None"/"N/A"/"-") to represent an empty tier instead of
-    // just leaving it with zero items, despite the prompt saying not to.
+
+  // The model has repeatedly mis-assigned vitamins/minerals to the wrong
+  // tier across multiple different reports despite several rounds of
+  // prompt fixes — this field's tier structure is parsed deterministically
+  // from the OCR text instead (see vitamins-parser.ts) whenever that parse
+  // succeeds, replacing whatever the model produced for it entirely.
+  const parsedVitamins = parseVitaminsSection(documentText);
+  if (parsedVitamins) {
+    mainData.vitamins_and_minerals = parsedVitamins;
+  } else if (Array.isArray(mainData.vitamins_and_minerals)) {
+    // Fallback: deterministic parse didn't recognize this document's
+    // layout, so use the model's own answer, still guarding against a
+    // placeholder item (name "None"/"N/A"/"-") added to represent an
+    // empty tier instead of just leaving it with zero items.
     mainData.vitamins_and_minerals = mainData.vitamins_and_minerals.filter((item) => {
       const name = item && typeof item === "object" ? String((item as Record<string, unknown>).name ?? "").trim() : "";
       return name && !["none", "n/a", "na", "-", "nil"].includes(name.toLowerCase());
