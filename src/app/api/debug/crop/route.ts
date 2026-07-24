@@ -51,15 +51,35 @@ export async function GET(request: NextRequest) {
   const pxBottom = Math.ceil((viewport.height - yBottom) * scale);
   const cropHeight = Math.max(1, pxBottom - pxTop);
 
-  const returnFull = request.nextUrl.searchParams.get("full") === "1";
-  if (returnFull) {
-    return NextResponse.json({ imageBase64: Buffer.from(pngBuffer).toString("base64") });
-  }
-
   const canvas = createCanvas(img.width, cropHeight);
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, -pxTop);
-  const cropBuffer = await canvas.encode("png");
 
-  return NextResponse.json({ imageBase64: Buffer.from(cropBuffer).toString("base64") });
+  // Render as ASCII art instead of returning binary — binary PNG bytes
+  // corrupt when round-tripped through text-only fetch tools (confirmed:
+  // a previous base64 attempt decoded to a PNG with valid headers but a
+  // truncated/broken data stream). Sample a coarse grid of pixel luminance
+  // values directly and map to characters — plain text, no transfer risk.
+  const imageData = ctx.getImageData(0, 0, img.width, cropHeight);
+  const cols = 160;
+  const rows = Math.max(1, Math.round((cropHeight / img.width) * cols * 2)); // *2 to compensate for character aspect ratio
+  const ramp = " .:-=+*#%@";
+  const lines: string[] = [];
+  for (let ry = 0; ry < rows; ry++) {
+    let line = "";
+    for (let rx = 0; rx < cols; rx++) {
+      const x = Math.floor((rx / cols) * img.width);
+      const y = Math.floor((ry / rows) * cropHeight);
+      const idx = (y * img.width + x) * 4;
+      const r = imageData.data[idx];
+      const g = imageData.data[idx + 1];
+      const b = imageData.data[idx + 2];
+      const luminance = (r + g + b) / 3;
+      const charIdx = Math.min(ramp.length - 1, Math.floor(((255 - luminance) / 255) * ramp.length));
+      line += ramp[charIdx];
+    }
+    lines.push(line);
+  }
+
+  return NextResponse.json({ file: target.name, imgWidth: img.width, cropHeight, ascii: lines.join("\n") });
 }
