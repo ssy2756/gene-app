@@ -52,9 +52,12 @@ const GENE_REPORT_PROMPT_BASE =
   "source PDF, is below) into JSON matching the schema given, following the field names in the " +
   "schema exactly. Do NOT include the pharmacogenomics section — that is extracted separately. " +
   "The OCR text may contain minor recognition errors (misread characters, stray line breaks) — " +
-  "use context to correct obvious ones. The uid is the Genomic Specimen ID printed on the " +
-  "report; if it is blank, use the patient name alone (do not invent a placeholder for a " +
-  "missing collection date). Preserve every condition, risk level, gene, and recommendation you " +
+  "use context to correct obvious ones. The uid is the value on the literal 'UID - <value>' line " +
+  "printed on page 1, directly under the Name/Age/Gender line — it is NOT the same as the " +
+  "'Genomic Specimen ID' field in sample_details (that is usually blank; do not confuse the " +
+  "two, and do not use it as the uid even if the UID line is hard to read). If the UID line is " +
+  "genuinely illegible or absent, use the patient name alone as a last resort (do not invent a " +
+  "placeholder). Preserve every condition, risk level, gene, and recommendation you " +
   "find — do not summarize or drop rows. The report does not print a body system per condition, " +
   "so classify each condition's body_system yourself using standard medical knowledge, from the " +
   "enum given in the schema. care_plan is not a section of the report — synthesize it from the " +

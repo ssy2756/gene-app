@@ -12,7 +12,7 @@ export const GENE_REPORT_SCHEMA = {
     uid: {
       type: "string",
       description:
-        "The report's unique identifier: the Genomic Specimen ID printed on the report. If it is blank, use the patient name alone instead — never invent a placeholder value.",
+        "The report's unique identifier: the value on the literal 'UID - <value>' line on page 1, directly under Name/Age/Gender. This is NOT the same field as sample_details.genomic_specimen_id (that field is usually blank on these reports) — do not use it as the uid. If the UID line is genuinely illegible or absent, use the patient name alone instead — never invent a placeholder value.",
     },
     patient_information: {
       type: "object",

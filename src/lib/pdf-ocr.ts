@@ -34,21 +34,32 @@ class NodeCanvasFactory {
 // How many pages to OCR concurrently. Reports run 60-90+ pages; OCR-ing
 // them one at a time risks exceeding the route's maxDuration (300s) long
 // before we're done. Rendering is CPU-bound and each page is independent,
-// so a small worker pool cuts wall-clock time roughly by this factor.
-const OCR_CONCURRENCY = 6;
+// so a worker pool cuts wall-clock time roughly by this factor — but each
+// tesseract.js worker (its own WASM heap + loaded model) plus each page's
+// rendered bitmap held in memory adds up. A real ingest was killed with
+// "instance was killed because it ran out of available memory" at
+// concurrency 6; dropped to 3 to keep peak memory well under the Hobby
+// plan's ceiling, trading some wall-clock time for headroom.
+const OCR_CONCURRENCY = 3;
+
+// Page 1 carries the "UID - <value>" line, rendered as vector art rather
+// than real text — OCR has repeatedly misread it even at 2x scale,
+// causing the model to fall back to a wrong uid. Rendering just this one
+// page at higher resolution costs little extra memory/time overall (it's
+// one page out of 60-90) but gives OCR a much better shot at that one
+// critical field.
+function scaleForPage(pageNum: number): number {
+  return pageNum === 1 ? 3.0 : 2.0;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function renderPageToPng(doc: any, pageNum: number): Promise<Buffer> {
   const canvasFactory = new NodeCanvasFactory();
   const page = await doc.getPage(pageNum);
-  // 2x scale: PDF default is 72 DPI, this renders at ~144 DPI. Tried
-  // dropping this to 1.6x to save time (route must fit inside Vercel's
-  // 300s Hobby-plan ceiling), but that caused a real reparse to fail
-  // reading the "UID - <value>" line — it's rendered as vector art, not
-  // real text, and is apparently more sensitive to resolution than normal
-  // body text. Not worth the risk: get speed from elsewhere (concurrency
-  // caps, page-chunk sizing), not by degrading OCR input quality.
-  const viewport = page.getViewport({ scale: 2.0 });
+  // 2x scale: PDF default is 72 DPI, this renders at ~144 DPI — enough
+  // resolution for OCR to read normal body text reliably (see
+  // scaleForPage for the page-1 exception).
+  const viewport = page.getViewport({ scale: scaleForPage(pageNum) });
   const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
   await page.render({ canvasContext: context, viewport, canvasFactory }).promise;
   const pngBuffer = canvas.toBuffer("image/png");
