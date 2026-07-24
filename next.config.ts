@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
       "./node_modules/regenerator-runtime/**",
       "./node_modules/wasm-feature-detect/**",
       "./node_modules/zlibjs/**",
+      // Bundled fallback font (src/lib/pdf-extract/ocr-fields.ts) —
+      // referenced via a runtime path.join(process.cwd(), ...), which
+      // Next's static-analysis tracer can't follow on its own.
+      "./assets/fonts/**",
     ],
   },
 };
