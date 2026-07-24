@@ -30,19 +30,23 @@ export async function extractUidAndAge(
     scale,
     canvasImport: () => import("@napi-rs/canvas"),
   });
+  console.log(`[ocr-fields] rendered page PNG: ${pngBuffer.byteLength} bytes`);
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const img = await loadImage(Buffer.from(pngBuffer));
+  console.log(`[ocr-fields] loaded image: ${img.width}x${img.height}`);
 
   const yTop = nameItem.y - nameItem.height * 0.5;
   const yBottom = sampleDetailsItem.y + sampleDetailsItem.height * 2;
   const pxTop = Math.max(0, Math.floor((viewport.height - yTop) * scale));
   const pxBottom = Math.ceil((viewport.height - yBottom) * scale);
   const cropHeight = Math.max(1, pxBottom - pxTop);
+  console.log(`[ocr-fields] crop: pxTop=${pxTop} pxBottom=${pxBottom} cropHeight=${cropHeight} imgWidth=${img.width}`);
 
   const canvas = createCanvas(img.width, cropHeight);
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, -pxTop);
   const cropBuffer = await canvas.encode("png");
+  console.log(`[ocr-fields] crop PNG: ${cropBuffer.byteLength} bytes`);
 
   const worker = await createWorker("eng", 1, {
     langPath: engTrainedData.langPath,
@@ -52,6 +56,7 @@ export async function extractUidAndAge(
   try {
     const { data } = await worker.recognize(cropBuffer);
     const text = data.text;
+    console.log(`[ocr-fields] OCR raw text: ${JSON.stringify(text)}`);
     const uidMatch = text.match(/UID\s*-?\s*([A-Za-z0-9]+)/i);
     const ageMatch = text.match(/Age\s*:?\s*(\d+)/i);
     return { uid: uidMatch ? uidMatch[1] : null, age: ageMatch ? Number(ageMatch[1]) : null };
