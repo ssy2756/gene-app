@@ -51,35 +51,43 @@ export async function GET(request: NextRequest) {
   const pxBottom = Math.ceil((viewport.height - yBottom) * scale);
   const cropHeight = Math.max(1, pxBottom - pxTop);
 
-  const canvas = createCanvas(img.width, cropHeight);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, -pxTop);
-
   // Render as ASCII art instead of returning binary — binary PNG bytes
   // corrupt when round-tripped through text-only fetch tools (confirmed:
   // a previous base64 attempt decoded to a PNG with valid headers but a
   // truncated/broken data stream). Sample a coarse grid of pixel luminance
   // values directly and map to characters — plain text, no transfer risk.
-  const imageData = ctx.getImageData(0, 0, img.width, cropHeight);
-  const cols = 160;
-  const rows = Math.max(1, Math.round((cropHeight / img.width) * cols * 2)); // *2 to compensate for character aspect ratio
-  const ramp = " .:-=+*#%@";
-  const lines: string[] = [];
-  for (let ry = 0; ry < rows; ry++) {
-    let line = "";
-    for (let rx = 0; rx < cols; rx++) {
-      const x = Math.floor((rx / cols) * img.width);
-      const y = Math.floor((ry / rows) * cropHeight);
-      const idx = (y * img.width + x) * 4;
-      const r = imageData.data[idx];
-      const g = imageData.data[idx + 1];
-      const b = imageData.data[idx + 2];
-      const luminance = (r + g + b) / 3;
-      const charIdx = Math.min(ramp.length - 1, Math.floor(((255 - luminance) / 255) * ramp.length));
-      line += ramp[charIdx];
+  function asciiOf(sourceCtx: ReturnType<ReturnType<typeof createCanvas>["getContext"]>, width: number, height: number, cols: number): string {
+    const imageData = sourceCtx.getImageData(0, 0, width, height);
+    const rows = Math.max(1, Math.round((height / width) * cols * 2));
+    const ramp = " .:-=+*#%@";
+    const lines: string[] = [];
+    for (let ry = 0; ry < rows; ry++) {
+      let line = "";
+      for (let rx = 0; rx < cols; rx++) {
+        const x = Math.floor((rx / cols) * width);
+        const y = Math.floor((ry / rows) * height);
+        const idx = (y * width + x) * 4;
+        const r = imageData.data[idx];
+        const g = imageData.data[idx + 1];
+        const b = imageData.data[idx + 2];
+        const luminance = (r + g + b) / 3;
+        const charIdx = Math.min(ramp.length - 1, Math.floor(((255 - luminance) / 255) * ramp.length));
+        line += ramp[charIdx];
+      }
+      lines.push(line);
     }
-    lines.push(line);
+    return lines.join("\n");
   }
 
-  return NextResponse.json({ file: target.name, imgWidth: img.width, cropHeight, ascii: lines.join("\n") });
+  const cropCanvas = createCanvas(img.width, cropHeight);
+  const cropCtx = cropCanvas.getContext("2d");
+  cropCtx.drawImage(img, 0, -pxTop);
+  const cropAscii = asciiOf(cropCtx, img.width, cropHeight, 160);
+
+  const fullCanvas = createCanvas(img.width, img.height);
+  const fullCtx = fullCanvas.getContext("2d");
+  fullCtx.drawImage(img, 0, 0);
+  const fullAscii = asciiOf(fullCtx, img.width, img.height, 120);
+
+  return NextResponse.json({ file: target.name, imgWidth: img.width, imgHeight: img.height, cropHeight, cropAscii, fullAscii });
 }
