@@ -1,6 +1,6 @@
 # GenepowerX report app
 
-PWA that parses genomic report PDFs (OCR'd page-by-page, then extracted into JSON via the DeepSeek API) into structured JSON, stores them in Neon Postgres, and lets users look up their report by UID. PDFs arrive automatically via a Google Drive drop folder (staff upload there, not through the app) rather than manual upload, though a manual upload sheet also exists as an admin fallback.
+PWA that parses genomic report PDFs (deterministically, via `src/lib/pdf-extract` — no OCR of the whole document, no LLM call) into structured JSON, stores them in Neon Postgres, and lets users look up their report by UID. PDFs arrive automatically via a Google Drive drop folder (staff upload there, not through the app) rather than manual upload, though a manual upload sheet also exists as an admin fallback.
 
 ## Status
 
@@ -9,14 +9,13 @@ Core app (auth, PDF parsing, UID lookup, full UI) is built. Still needed to go l
 1. **Deploy to Vercel + connect Neon**, run `db/schema.sql`, set env vars.
 2. **A seeded user** — there's no signup flow by design (users are provisioned, not self-registered); insert a row into `users` manually (see below).
 3. **Google Cloud project + service account** for the Drive ingestion pipeline (see "Google Drive setup" below) — required before PDFs dropped in Drive can be auto-parsed.
-4. **A DeepSeek API key.**
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env.local
-# fill in DATABASE_URL (Neon), DEEPSEEK_API_KEY, SESSION_SECRET
+# fill in DATABASE_URL (Neon), SESSION_SECRET
 ```
 
 Apply the schema to your Neon database:
@@ -40,8 +39,8 @@ npm run dev
 
 ## Architecture
 
-- `src/lib/pdf-ocr.ts` — rasterizes every PDF page to a bitmap (`@napi-rs/canvas` + `pdfjs-dist`) and OCRs each page (`tesseract.js`) into plain text, preserving document order — since some fields (e.g. `uid`) render as vector art with no text layer, and DeepSeek has no vision input.
-- `src/lib/ingest-report.ts` — the single place that turns a PDF buffer into a stored report: OCRs it via `pdf-ocr.ts`, sends the resulting text to DeepSeek (`deepseek-chat` by default, override via `DEEPSEEK_MODEL`) as a plain-text prompt (see the comment there and in `AGENTS.md`), validates against `reportDataSchema` (`src/lib/report-schema.ts`), upserts into `reports` keyed by `uid`.
+- `src/lib/pdf-extract/` — deterministic PDF-to-JSON extraction, no OCR of the whole document and no LLM call (see `AGENTS.md` for the full rationale and the one field — page-1 UID — that still needs a small targeted OCR crop via `ocr-fields.ts`). `index.ts` is the entry point (`extractReportPdf`); `grid.ts` has the two custom vector-graphics table detectors; `sections.ts` has the narrative/regex parsers; `structure.ts` locates section page-ranges by header text.
+- `src/lib/ingest-report.ts` — the single place that turns a PDF buffer into a stored report: calls `extractReportPdf`, validates against `reportDataSchema` (`src/lib/report-schema.ts`), upserts into `reports` keyed by `uid`.
 - `src/app/api/parse-pdf` — manual upload path (admin fallback / in-app Upload sheet), calls `ingestReportPdf`.
 - `src/app/api/drive/webhook` + `src/app/api/drive/register-watch` — the primary ingestion path: Google Drive push notifications trigger parsing automatically when staff drop a PDF into a shared folder. See "Google Drive setup" below.
 - `scripts/poll-drive.ts` (`npm run poll-drive`) — local-testing alternative to the webhook (no public URL needed): lists PDFs in the target folder and ingests anything new.

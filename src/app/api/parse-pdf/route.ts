@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { sessionCookieName, verifySessionToken } from "@/lib/auth";
 import { ingestReportPdf, IngestError } from "@/lib/ingest-report";
 
-// OCR-ing a 60-90 page PDF plus a dozen-odd parallel DeepSeek calls can
-// take several minutes — same reasoning as /api/drive/reparse and
-// /api/drive/webhook. This route previously had no maxDuration set at
-// all (silently capped at the platform default), which would have timed
-// out long before ingestReportPdf finished.
+// Extraction is deterministic and fast (no OCR-of-the-whole-document, no
+// LLM calls — see src/lib/pdf-extract), but keep a generous ceiling here
+// consistent with /api/drive/reparse and /api/drive/webhook.
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {

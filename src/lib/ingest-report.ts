@@ -1,24 +1,6 @@
-import OpenAI from "openai";
 import { sql } from "@/lib/db";
-import { extractPdfTextViaOcr } from "@/lib/pdf-ocr";
-import { GENE_REPORT_SCHEMA, PHARMACOGENOMICS_SCHEMA, reportDataSchema } from "@/lib/report-schema";
-import { parseVitaminsSection } from "@/lib/vitamins-parser";
-
-// DeepSeek's API is OpenAI-SDK-compatible (chat completions), just served
-// from a different base URL — no vision/file input support, hence the OCR
-// pass in pdf-ocr.ts feeding it plain text instead.
-let deepseekClient: OpenAI | null = null;
-function getDeepSeek(): OpenAI {
-  if (!deepseekClient) {
-    deepseekClient = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      baseURL: "https://api.deepseek.com",
-    });
-  }
-  return deepseekClient;
-}
-
-const MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+import { extractReportPdf, PdfExtractError } from "@/lib/pdf-extract";
+import { reportDataSchema } from "@/lib/report-schema";
 
 export class IngestError extends Error {
   status: number;
@@ -31,278 +13,56 @@ export class IngestError extends Error {
   }
 }
 
-// Diagnostic logging for the "Model did not return valid JSON" failure —
-// most commonly caused by hitting the output token cap mid-object (the
-// response gets cut off, so it's well-formed-looking but incomplete JSON).
-// Vercel truncates long log lines, so this logs just the finish reason and
-// the tail of the text (where truncation would show).
-function logInvalidJson(label: string, finishReason: string | undefined, text: string) {
-  console.error(
-    `Ingest[${label}]: invalid JSON from model.`,
-    "finish_reason:",
-    finishReason,
-    "output length (chars):",
-    text.length,
-    "last 500 chars:",
-    text.slice(-500)
-  );
-}
-
-const GENE_REPORT_PROMPT_BASE =
-  "Extract all data from this GenepoweRx genetic report (its full text, OCR-extracted from the " +
-  "source PDF, is below) into JSON matching the schema given, following the field names in the " +
-  "schema exactly. Do NOT include the pharmacogenomics section — that is extracted separately. " +
-  "The OCR text may contain minor recognition errors (misread characters, stray line breaks) — " +
-  "use context to correct obvious ones. The uid is the value on the literal 'UID - <value>' line " +
-  "printed on page 1, directly under the Name/Age/Gender line — it is NOT the same as the " +
-  "'Genomic Specimen ID' field in sample_details (that is usually blank; do not confuse the " +
-  "two, and do not use it as the uid even if the UID line is hard to read). If the UID line is " +
-  "genuinely illegible or absent, use the patient name alone as a last resort (do not invent a " +
-  "placeholder). Preserve every condition, risk level, gene, and recommendation you " +
-  "find — do not summarize or drop rows. The report does not print a body system per condition, " +
-  "so classify each condition's body_system yourself using standard medical knowledge, from the " +
-  "enum given in the schema. care_plan is not a section of the report — synthesize it from the " +
-  "'monitor X every Y' style actions already present in medical_recommendations and elsewhere, " +
-  "deduplicating repeated actions across conditions. For the Lifestyle section: 'exercise' must " +
-  "come ONLY from the 'Exercise' subsection of the 'Tailored Fitness: Musculoskeletal Resilience " +
-  "for Every Step' page — never from 'Medical Recommendations' or 'Diet and Nutrition'. " +
-  "'food_sensitivity' must come from the separate 'Your Metabolism' section — this is a " +
-  "different section from Exercise, do not confuse them, and food_sensitivity must not be left " +
-  "empty if that section exists. 'vitamins_and_minerals' MUST be a JSON array directly (e.g. " +
-  "\"vitamins_and_minerals\": [{...}, {...}]) — do NOT wrap it in an object with an 'items'/" +
-  "'list' key. Extract the itemized list under the 'Vitamins and Minerals Summary' page as " +
-  "individual items; EVERY item MUST include a non-empty 'tier' field with the tier label " +
-  "exactly as printed in the text immediately above it — the OCR text preserves the document's " +
-  "top-to-bottom reading order, so assign each item to the nearest tier label that appears " +
-  "before it in the text, not to a tier assumed from habit or list position. A tier label can " +
-  "appear in the text with zero items listed after it before the next tier label — that is " +
-  "valid, leave it with no items, never invent items to fill it. Do NOT add a placeholder item " +
-  "(e.g. name 'None'/'N/A'/'-') for an empty tier — an empty tier means zero objects in the " +
-  "array for that tier, not one object representing emptiness. IMPORTANT: the OCR frequently " +
-  "inserts a stray single-character noise line (e.g. a lone 'E') right after a tier header — " +
-  "this is OCR misreading a decorative icon/graphic near the header, NOT a real line of text and " +
-  "NOT part of that tier's item list. Skip any such stray single-character or clearly-garbled " +
-  "line when deciding what belongs to a tier; only real named vitamin/mineral items (with a name " +
-  "and, usually, a dose in parentheses) count as items. Read past that noise to find the true " +
-  "next tier header or the first real item line before assigning anything.";
-
-const PHARMACOGENOMICS_PROMPT_BASE =
-  "The document text below is ONE PORTION (a page range) of a larger genetic report's " +
-  "Pharmacogenomics (PGx) section: a gene diplotype panel, then per-drug-class tables of " +
-  "individual drug rows (molecule class, drug name, level of evidence, response category/" +
-  "mechanism, clinical recommendation), then a therapeutic summary. The full PGx section can " +
-  "span 300+ drug rows across dozens of drug classes (antiplatelets, anticoagulants, " +
-  "antihypertensives, diabetic drugs, statins, PPIs, antiemetics, painkillers, asthma meds, " +
-  "anti-inflammatories, anti-epileptics, opioids, psychiatric drugs, antivirals, transplant " +
-  "drugs, etc.) — but this call only covers the portion given below. The OCR text may contain " +
-  "minor recognition errors — use context to correct obvious ones. Extract every diplotype row " +
-  "and every drug row that actually appears in THIS portion of text — do not summarize, sample, " +
-  "or truncate. If this portion contains no PGx content at all (e.g. it's from a different part " +
-  "of the report), return empty arrays rather than inventing rows.";
-
-// The PGx section alone can hit 300+ drug rows, which overflows a single
-// response's output-token budget (DeepSeek truncates mid-array, producing
-// invalid JSON). Splitting the OCR'd document into page-range chunks and
-// running one pharmacogenomics extraction call per chunk (in parallel),
-// then merging, keeps each individual response small enough to finish.
-// 15 pages/chunk still overflowed on a dense stretch of drug tables (one
-// chunk hit finish_reason=length at ~28k output chars). Dropping to 6
-// pages/chunk trades more parallel calls for a much safer per-call margin.
-const PHARMACOGENOMICS_PAGES_PER_CHUNK = 6;
-
-// Firing all ~11 chunk calls at once risks provider-side throttling
-// (queued/serialized requests) stalling the whole batch past the route's
-// 300s ceiling. Capping concurrency keeps a bounded number in flight at
-// once — still parallel, just not an unbounded burst.
-const PHARMACOGENOMICS_CONCURRENCY = 5;
-
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
-
-function splitDocumentByPages(documentText: string, pagesPerChunk: number): string[] {
-  const pageBlocks = documentText.split(/(?=--- Page \d+ ---)/g).filter((b) => b.trim());
-  const chunks: string[] = [];
-  for (let i = 0; i < pageBlocks.length; i += pagesPerChunk) {
-    chunks.push(pageBlocks.slice(i, i + pagesPerChunk).join("\n\n"));
-  }
-  return chunks.length > 0 ? chunks : [documentText];
-}
-
-function dedupeKey(...parts: unknown[]): string {
-  return parts.map((p) => String(p ?? "").trim().toLowerCase()).join("|");
-}
-
-// Merges per-chunk pharmacogenomics extraction results into one object,
-// de-duplicating rows that inevitably appear in more than one chunk
-// (chunk boundaries don't align with drug-class table boundaries).
-function mergePharmacogenomics(chunks: Record<string, unknown>[]): Record<string, unknown> {
-  const diplotypesSeen = new Map<string, unknown>();
-  const drugsSeen = new Map<string, unknown>();
-  let summary: unknown;
-
-  for (const chunk of chunks) {
-    const diplotypes = Array.isArray(chunk.diplotypes) ? chunk.diplotypes : [];
-    for (const d of diplotypes) {
-      if (d && typeof d === "object") {
-        const key = dedupeKey((d as Record<string, unknown>).gene);
-        if (key && !diplotypesSeen.has(key)) diplotypesSeen.set(key, d);
-      }
-    }
-    const drugs = Array.isArray(chunk.drug_recommendations) ? chunk.drug_recommendations : [];
-    for (const d of drugs) {
-      if (d && typeof d === "object") {
-        const rec = d as Record<string, unknown>;
-        const key = dedupeKey(rec.molecule_class, rec.drug);
-        if (key && !drugsSeen.has(key)) drugsSeen.set(key, d);
-      }
-    }
-    if (!summary && chunk.summary && typeof chunk.summary === "object" && Object.keys(chunk.summary).length > 0) {
-      summary = chunk.summary;
-    }
-  }
-
-  return {
-    diplotypes: [...diplotypesSeen.values()],
-    drug_recommendations: [...drugsSeen.values()],
-    summary: summary ?? {},
-  };
-}
-
-function buildPrompt(base: string, schema: object, documentText: string): string {
-  return `${base}
-
-Extract the data as JSON matching this schema:
-
-${JSON.stringify(schema, null, 2)}
-
-Document text (OCR-extracted from the PDF):
-
-${documentText}
-
-Respond with ONLY the JSON object, no other text.`;
-}
-
-function parseJsonResponse(label: string, finishReason: string | undefined, text: string | null | undefined): unknown {
-  if (!text) {
-    throw new IngestError("No text response from model", 502);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Defense in depth on top of the json_object response format below:
-    // strip markdown code fences some models still add, and fall back to
-    // the largest {...} substring if there's stray prose around the JSON.
-    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-    try {
-      return JSON.parse(stripped);
-    } catch {
-      const match = stripped.match(/\{[\s\S]*\}/);
-      if (!match) {
-        logInvalidJson(label, finishReason, text);
-        throw new IngestError("Model did not return valid JSON", 502);
-      }
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        logInvalidJson(label, finishReason, text);
-        throw new IngestError("Model did not return valid JSON", 502);
-      }
-    }
-  }
-}
-
-// Runs one DeepSeek extraction call with the given prompt (which already
-// includes the OCR'd document text) and returns the parsed JSON object.
-async function extract(label: string, prompt: string): Promise<Record<string, unknown>> {
-  const response = await getDeepSeek().chat.completions.create({
-    model: MODEL,
-    max_tokens: 8000,
-    // Forces valid JSON output. Without this, models sometimes wrap the
-    // JSON in markdown code fences or add stray prose despite the prompt
-    // saying not to — this makes it a hard API-level guarantee instead of
-    // a request.
-    response_format: { type: "json_object" },
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const choice = response.choices[0];
-  const parsed = parseJsonResponse(label, choice?.finish_reason, choice?.message?.content);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new IngestError("Model did not return a JSON object", 502);
-  }
-  return parsed as Record<string, unknown>;
-}
-
-// Parses a genomic report PDF via OCR (pdf-ocr.ts) followed by two DeepSeek
-// calls (main report, then pharmacogenomics separately), merges and
-// validates the result, and upserts it into `reports` keyed by uid. Shared
-// by the manual upload route (src/app/api/parse-pdf/route.ts) and the
+// Parses a genomic report PDF and upserts it into `reports` keyed by uid.
+// Shared by the manual upload route (src/app/api/parse-pdf/route.ts) and the
 // Google Drive ingestion pipeline (src/app/api/drive/webhook,
 // scripts/poll-drive.ts) so there is exactly one place that defines how a
 // PDF becomes a stored report.
 //
-// expectedUid: the "UID - <value>" line is rendered as vector art, not
-// real text, and OCR reads it correctly on some passes but not others —
-// when it misreads, the model falls back to the patient-name rule and
-// silently writes a new row under the wrong key instead of updating the
-// intended one. When the caller already knows the uid (reparsing an
+// Extraction is fully deterministic (src/lib/pdf-extract) — no OCR-of-the-
+// whole-document and no LLM calls. A diagnostic pass established that this
+// document type has a real PDF text layer for everything except the page-1
+// "UID"/"Age" fields (genuinely flattened vector art from the PowerPoint
+// export), which get a small targeted OCR crop instead of full-document
+// OCR. This replaced an OCR(whole doc)+DeepSeek pipeline that repeatedly
+// produced unstable output on the same document (vitamins tier
+// mis-assignment, uid drift, and — most recently — food-sensitivity gene
+// lists fabricated wholesale, since no gene data exists in that section of
+// the source at all).
+//
+// expectedUid: the "UID - <value>" line is read via OCR and can misread
+// occasionally — when the caller already knows the uid (reparsing an
 // existing report), pass it here to use directly instead of trusting
-// extraction — sidesteps the OCR reliability problem entirely for that
-// case. Only a first-time Drive-triggered ingest has no expected uid.
+// extraction, so a misread never silently creates a new row under the
+// wrong key. Only a first-time Drive-triggered ingest has no expected uid.
 export async function ingestReportPdf(pdfBuffer: Buffer, expectedUid?: string): Promise<{ uid: string }> {
-  const documentText = await extractPdfTextViaOcr(pdfBuffer);
-  const pharmacogenomicsChunks = splitDocumentByPages(documentText, PHARMACOGENOMICS_PAGES_PER_CHUNK);
-
-  const [mainData, pharmacogenomicsResults] = await Promise.all([
-    extract("gene_report", buildPrompt(GENE_REPORT_PROMPT_BASE, GENE_REPORT_SCHEMA, documentText)),
-    mapWithConcurrency(pharmacogenomicsChunks, PHARMACOGENOMICS_CONCURRENCY, (chunk, i) =>
-      extract(`pharmacogenomics[${i}]`, buildPrompt(PHARMACOGENOMICS_PROMPT_BASE, PHARMACOGENOMICS_SCHEMA, chunk))
-    ),
-  ]);
-
-  const pharmacogenomics = mergePharmacogenomics(pharmacogenomicsResults);
-
-  // The model has repeatedly mis-assigned vitamins/minerals to the wrong
-  // tier across multiple different reports despite several rounds of
-  // prompt fixes — this field's tier structure is parsed deterministically
-  // from the OCR text instead (see vitamins-parser.ts) whenever that parse
-  // succeeds, replacing whatever the model produced for it entirely.
-  const parsedVitamins = parseVitaminsSection(documentText);
-  if (parsedVitamins) {
-    mainData.vitamins_and_minerals = parsedVitamins;
-  } else if (Array.isArray(mainData.vitamins_and_minerals)) {
-    // Fallback: deterministic parse didn't recognize this document's
-    // layout, so use the model's own answer, still guarding against a
-    // placeholder item (name "None"/"N/A"/"-") added to represent an
-    // empty tier instead of just leaving it with zero items.
-    mainData.vitamins_and_minerals = mainData.vitamins_and_minerals.filter((item) => {
-      const name = item && typeof item === "object" ? String((item as Record<string, unknown>).name ?? "").trim() : "";
-      return name && !["none", "n/a", "na", "-", "nil"].includes(name.toLowerCase());
-    });
+  let extracted: Record<string, unknown>;
+  try {
+    extracted = await extractReportPdf(pdfBuffer);
+  } catch (err) {
+    if (err instanceof PdfExtractError) {
+      throw new IngestError(err.message, 422);
+    }
+    throw err;
   }
-  const merged = { ...mainData, pharmacogenomics };
 
-  const validation = reportDataSchema.safeParse(merged);
+  const { uid: extractedUid, ...data } = extracted;
+  const uid = expectedUid ?? (typeof extractedUid === "string" && extractedUid ? extractedUid : null);
+  if (!uid) {
+    throw new IngestError("Could not determine report uid (OCR crop failed and no expectedUid was given)", 422);
+  }
+
+  const validation = reportDataSchema.safeParse({ uid, ...data });
   if (!validation.success) {
-    throw new IngestError("Parsed JSON failed validation", 422, validation.error.issues);
+    throw new IngestError("Extracted data failed validation", 422, validation.error.issues);
   }
 
-  const { uid: extractedUid, ...data } = validation.data;
-  const uid = expectedUid ?? extractedUid;
+  const validatedData: Record<string, unknown> = { ...validation.data };
+  delete validatedData.uid;
 
   await sql`
     INSERT INTO reports (uid, data, updated_at)
-    VALUES (${uid}, ${JSON.stringify(data)}::jsonb, now())
+    VALUES (${uid}, ${JSON.stringify(validatedData)}::jsonb, now())
     ON CONFLICT (uid) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
   `;
 

@@ -17,11 +17,11 @@
     "googleapis": "^173.0.0",
     "jose": "^6.2.3",
     "next": "16.2.10",
-    "openai": "^6.48.0",
     "pdfjs-dist": "^6.1.200",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tesseract.js": "^7.0.0",
+    "unpdf": "^1.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

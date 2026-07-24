@@ -9,14 +9,15 @@ const nextConfig: NextConfig = {
   // reference to a build-time placeholder ("/ROOT/...") that isn't valid
   // at runtime, breaking the trained-data file lookup. Marking it external
   // keeps that path resolution literal/correct.
-  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js", "@tesseract.js-data/eng"],
-  // Belt-and-suspenders alongside the explicit import in pdf-ocr.ts: force
-  // these dynamically-loaded runtime files (pdfjs's worker, tesseract's
-  // WASM core/worker, the bundled trained-data file) into the deployed
-  // function even if tracing would otherwise miss any of them.
+  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "unpdf", "tesseract.js", "@tesseract.js-data/eng"],
+  // Belt-and-suspenders alongside the explicit imports in
+  // src/lib/pdf-extract: force these dynamically-loaded runtime files
+  // (pdfjs's worker, tesseract's WASM core/worker, the bundled
+  // trained-data file) into the deployed function even if tracing would
+  // otherwise miss any of them.
   outputFileTracingIncludes: {
     "/api/**/*": [
-      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+      "./node_modules/pdfjs-dist/**",
       "./node_modules/tesseract.js-core/**",
       // The worker script's internal requires (constants/, utils/, etc.)
       // aren't all picked up by selectively including subfolders — the
