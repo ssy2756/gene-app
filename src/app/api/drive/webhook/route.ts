@@ -38,11 +38,23 @@ export async function POST(request: Request) {
   for (const change of changes) {
     if (change.trashed) continue;
 
-    const alreadyProcessed = await sql`
-      SELECT 1 FROM processed_drive_files WHERE drive_file_id = ${change.fileId}
+    // Google redelivers the same change notification multiple times while a
+    // prior invocation is still in flight (observed: 6+ near-simultaneous
+    // POSTs for one file). The old check-then-ingest-then-insert sequence
+    // left a window where every one of those overlapping requests would
+    // see "not yet processed" and all start ingesting the same file at
+    // once — wasteful at best, and multiplies OCR worker memory pressure
+    // at worst. Claim the file atomically first: only the request whose
+    // INSERT actually lands (unique on drive_file_id) proceeds; everyone
+    // else sees the conflict and skips immediately.
+    const claimed = await sql`
+      INSERT INTO processed_drive_files (drive_file_id, uid)
+      VALUES (${change.fileId}, 'PENDING')
+      ON CONFLICT (drive_file_id) DO NOTHING
+      RETURNING drive_file_id
     `;
-    if (alreadyProcessed.length > 0) {
-      console.log(`[drive/webhook] skipping already-processed file: ${change.name}`);
+    if (claimed.length === 0) {
+      console.log(`[drive/webhook] skipping already-claimed/processed file: ${change.name}`);
       continue;
     }
 
@@ -50,11 +62,7 @@ export async function POST(request: Request) {
       console.log(`[drive/webhook] downloading and ingesting: ${change.name}`);
       const buffer = await downloadFile(change.fileId);
       const { uid } = await ingestReportPdf(buffer);
-      await sql`
-        INSERT INTO processed_drive_files (drive_file_id, uid)
-        VALUES (${change.fileId}, ${uid})
-        ON CONFLICT (drive_file_id) DO NOTHING
-      `;
+      await sql`UPDATE processed_drive_files SET uid = ${uid} WHERE drive_file_id = ${change.fileId}`;
       console.log(`[drive/webhook] ingested ${change.name} -> uid ${uid}`);
       results.push({ fileId: change.fileId, name: change.name, uid });
     } catch (err) {
@@ -63,6 +71,9 @@ export async function POST(request: Request) {
       console.error(`[drive/webhook] failed to ingest ${change.name}:`, err);
       const message = err instanceof IngestError ? err.message : "Unknown error";
       results.push({ fileId: change.fileId, name: change.name, error: message });
+      // Release the claim so a future retry (manual reparse, or another
+      // Drive notification) isn't permanently blocked by a stuck PENDING row.
+      await sql`DELETE FROM processed_drive_files WHERE drive_file_id = ${change.fileId} AND uid = 'PENDING'`;
     }
   }
 
