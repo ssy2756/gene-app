@@ -22,6 +22,8 @@ const BODY_SYSTEM_MAP: Record<string, string> = {
   arrhythmias: "Cardiovascular",
   "alzheimer's disease / dementia": "Neurological",
   "chronic kidney disease": "Other",
+  "autoimmune conditions": "Immune",
+  "hereditary cancer risk": "Other",
 };
 
 export function bodySystemFor(conditionName: string): string {

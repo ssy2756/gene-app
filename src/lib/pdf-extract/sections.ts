@@ -208,6 +208,19 @@ export function parseDietPlan(pagesLines: string[][]): { heading: string; recomm
   return sections;
 }
 
+// Derives a risk_level from a "Test Result" sentence for sections (immune
+// health, hereditary cancer) that don't use the "You have X genetic risk
+// for Y" phrasing — e.g. "Positive for a Moderate impact variant..." or
+// "Negative for Pathogenic/Likely pathogenic variants...".
+export function deriveRiskFromTestResult(testResult: string | null): string {
+  if (!testResult) return "Low";
+  const explicit = testResult.match(/\b(low|mild|moderate|high)\b/i);
+  if (explicit) return explicit[1][0].toUpperCase() + explicit[1].slice(1).toLowerCase();
+  if (/^negative/i.test(testResult)) return "Low";
+  if (/^positive/i.test(testResult)) return "Moderate";
+  return "Low";
+}
+
 // ---- Immune health (pages 13-14) ----
 
 export function parseImmuneHealth(pagesLines: string[][]) {

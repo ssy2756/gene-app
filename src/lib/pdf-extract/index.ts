@@ -14,6 +14,8 @@ import {
   parseDietPlan,
   parseImmuneHealth,
   parseHereditaryCancer,
+  deriveRiskFromTestResult,
+  type ConditionNarrative,
 } from "./sections";
 import { parseDiplotypePanel, parseDrugTablePage, parseMethylationPage, parseReferencesPage, parseBiomarkersPages } from "./tables";
 
@@ -61,6 +63,13 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
   const personal_information = parsePersonalInformation(linesByPage[0]);
   const { uid, age } = await extractUidAndAge(pdf, items[0]);
 
+  // ---- Immune health / hereditary cancer (parsed early so they can also
+  // feed condition_risk_overview below — they're genuine risk-assessed
+  // conditions in the report, just phrased as "Test Result: Positive/
+  // Negative for..." rather than "You have X genetic risk for Y") ----
+  const immune_health = immunePages.length ? parseImmuneHealth(immunePages.map((p) => linesByPage[p - 1])) : null;
+  const hereditary_cancer_screening = cancerPage ? parseHereditaryCancer(linesByPage[cancerPage - 1]) : null;
+
   // ---- Condition risk overview + medical_recommendations ----
   const glossaryText = glossaryPages.map((p) => linesByPage[p - 1].join("\n")).join("\n");
   const concernsLines = concernsPages.map((p) => linesByPage[p - 1]);
@@ -68,6 +77,24 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
   if (fitnessPage) {
     const musculo = parseMusculoskeletal(linesByPage[fitnessPage - 1]);
     if (musculo) narratives.push(musculo);
+  }
+  if (immune_health?.test_result) {
+    const extra: ConditionNarrative = {
+      condition: "Autoimmune Conditions",
+      risk_level: deriveRiskFromTestResult(immune_health.test_result),
+      narrative: [immune_health.test_result, ...immune_health.variant_details].join(" "),
+      recommendations: immune_health.recommendations,
+    };
+    narratives.push(extra);
+  }
+  if (hereditary_cancer_screening?.test_result) {
+    const extra: ConditionNarrative = {
+      condition: "Hereditary Cancer Risk",
+      risk_level: deriveRiskFromTestResult(hereditary_cancer_screening.test_result),
+      narrative: hereditary_cancer_screening.test_result,
+      recommendations: hereditary_cancer_screening.recommendations,
+    };
+    narratives.push(extra);
   }
 
   const condition_risk_overview = narratives.map((n) => ({
@@ -107,11 +134,9 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
   // ---- Diet plan ----
   const diet_plan_recommendations = dietPlanPages.length ? parseDietPlan(dietPlanPages.map((p) => linesByPage[p - 1])) : [];
 
-  // ---- Immune health / hereditary cancer / references (not currently
-  // rendered by the UI, but stored for completeness — see report-mapping.ts
-  // header comment on which fields the app actually reads) ----
-  const immune_health = immunePages.length ? parseImmuneHealth(immunePages.map((p) => linesByPage[p - 1])) : null;
-  const hereditary_cancer_screening = cancerPage ? parseHereditaryCancer(linesByPage[cancerPage - 1]) : null;
+  // ---- References / biomarkers glossary (not currently rendered by the
+  // UI, but stored for completeness — see report-mapping.ts header comment
+  // on which fields the app actually reads) ----
   const references = referencesPage ? await parseReferencesPage(pdfjs, await pdf.getPage(referencesPage), items[referencesPage - 1]) : [];
   const biomarkers_analyzed = biomarkersPages.length ? await parseBiomarkersPages(pdfjs, pdf, biomarkersPages, items) : [];
 
