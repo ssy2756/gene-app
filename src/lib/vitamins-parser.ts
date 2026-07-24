@@ -33,7 +33,16 @@ const ITEM_RE = /([A-Za-z][A-Za-z0-9\-\s]{1,45}?)\s*\(([^)]{1,20})\)/g;
 // heading, stop at the next major section (these reports move on to
 // Pharmacogenomics/appendix/glossary content next).
 const SECTION_START_RE = /VITAMINS AND MINERALS SUMMARY/i;
-const SECTION_END_RE = /PHARMACOGENOMICS|GLOSSARY|THERAPEUTIC SUMMARY/i;
+// The real per-item tier list ends right where the "Natural Food Sources"
+// subsection (or, on some documents, a "Methylation Markers"/pharmacogenomics
+// section) begins. Matching "PHARMACOGENOMICS" (plural) alone missed a real
+// document that prints "PHARMACOGENOMIC ANALYSIS" (singular) — with no end
+// boundary found, the scan ran straight through the entire 150+ row
+// pharmacogenomics table, misreading a stray "Essential"-prefixed line in
+// there as a new tier header and dumping the rest of the document into the
+// vitamins result. Use prefix matches (no S) and add the food-sources/
+// methylation anchors as extra, more immediate boundaries.
+const SECTION_END_RE = /NATURAL FOOD SOURCES|METHYLATION MARKERS|PHARMACOGENOMIC|GLOSSARY|THERAPEUTIC SUMMARY/i;
 
 // Parses the vitamins/minerals tier structure directly out of the OCR'd
 // document text. Returns null if the section can't be confidently found
@@ -87,7 +96,13 @@ export function parseVitaminsSection(documentText: string): ParsedVitaminItem[] 
   // headers and at least one real item. If not, this document's layout
   // doesn't match what this parser expects — bail out and let the caller
   // fall back to the LLM's own answer instead of trusting a bad parse.
-  if (tiersSeen < 2 || items.length === 0) return null;
+  //
+  // Also cap the total: a real vitamins/minerals list on these reports never
+  // exceeds ~25 items. A much larger count means the section-end boundary
+  // failed to fire and the scan ran on into unrelated content (methylation
+  // markers, the 150+ row pharmacogenomics table, etc.) — better to fall
+  // back to the LLM's answer than return a runaway parse.
+  if (tiersSeen < 2 || items.length === 0 || items.length > 30) return null;
 
   return items;
 }
