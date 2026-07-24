@@ -42,7 +42,16 @@ const SECTION_START_RE = /VITAMINS AND MINERALS SUMMARY/i;
 // there as a new tier header and dumping the rest of the document into the
 // vitamins result. Use prefix matches (no S) and add the food-sources/
 // methylation anchors as extra, more immediate boundaries.
-const SECTION_END_RE = /NATURAL FOOD SOURCES|METHYLATION MARKERS|PHARMACOGENOMIC|GLOSSARY|THERAPEUTIC SUMMARY/i;
+//
+// "NATURAL FOOD SOURCES" itself isn't reliable as a single-line phrase —
+// OCR sometimes wraps it as "Vitamins and Minerals" / "Natural Food Sources"
+// across two separate lines, which this regex (no multiline span) then
+// fails to match, letting both of those junk lines get swept up as fake
+// items first. The section's own title repeating ("VITAMINS AND MINERALS
+// SUMMARY" appears again on the Natural Food Sources page) is a more
+// reliable single-line anchor for the same boundary — added as the first,
+// earliest-firing alternative.
+const SECTION_END_RE = /VITAMINS AND MINERALS SUMMARY|NATURAL FOOD SOURCES|METHYLATION MARKERS|PHARMACOGENOMIC|GLOSSARY|THERAPEUTIC SUMMARY/i;
 
 // Parses the vitamins/minerals tier structure directly out of the OCR'd
 // document text. Returns null if the section can't be confidently found
