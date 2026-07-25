@@ -88,3 +88,62 @@ export async function extractUidAndAge(
     await worker.terminate();
   }
 }
+
+// Some pages print a risk-level word ("Mild"/"Low"/"Moderate"/"High") only
+// as a label next to a thermometer-gauge graphic, not as extractable text —
+// confirmed via a direct text-item dump (zero items anywhere in the right
+// ~40% of the page for the food-sensitivity page) — same category of
+// problem as the page-1 UID line. This crops a vertical band per category
+// (title item's y down to the next category's y, i.e. that category's full
+// row) on the right-hand side of the page, where these reports place the
+// gauge, and OCRs just that strip.
+export async function extractGaugeRiskLevels(
+  pdf: PdfDocument,
+  pageNum: number,
+  pageItems: Item[],
+  categoryTitleRe: RegExp
+): Promise<Map<string, string | null>> {
+  const results = new Map<string, string | null>();
+  const categoryItems = pageItems.filter((i) => categoryTitleRe.test(i.str.trim())).sort((a, b) => b.y - a.y);
+  if (categoryItems.length === 0) return results;
+
+  await ensureFontsRegistered();
+
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 1 });
+  const scale = 3;
+
+  const pngBuffer = await renderPageAsImage(pdf, pageNum, { scale, canvasImport: () => import("@napi-rs/canvas") });
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const img = await loadImage(Buffer.from(pngBuffer));
+
+  const worker = await createWorker("eng", 1, {
+    langPath: engTrainedData.langPath,
+    gzip: engTrainedData.gzip,
+    cachePath: "/tmp",
+  });
+  try {
+    for (let i = 0; i < categoryItems.length; i++) {
+      const name = categoryItems[i].str.trim();
+      const top = categoryItems[i].y + 20;
+      const bottom = i + 1 < categoryItems.length ? categoryItems[i + 1].y : 0;
+      const pxTop = Math.max(0, Math.floor((viewport.height - top) * scale));
+      const pxBottom = Math.min(img.height, Math.ceil((viewport.height - bottom) * scale));
+      const cropHeight = pxBottom - pxTop;
+      if (cropHeight <= 0) continue;
+      const xStart = Math.floor(viewport.width * 0.72 * scale);
+      const cropWidth = img.width - xStart;
+
+      const canvas = createCanvas(cropWidth, cropHeight);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, -xStart, -pxTop);
+      const cropBuffer = await canvas.encode("png");
+      const { data } = await worker.recognize(cropBuffer);
+      const match = data.text.match(/\b(low|mild|moderate|high)\b/i);
+      results.set(name, match ? match[1].toLowerCase() : null);
+    }
+  } finally {
+    await worker.terminate();
+  }
+  return results;
+}

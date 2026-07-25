@@ -1,7 +1,7 @@
 import { getDocumentProxy, getResolvedPDFJS, extractTextItems } from "unpdf";
 import { reconstructLines } from "./reconstruct";
 import { firstLines, findPageRun, findFirstPage } from "./structure";
-import { extractUidAndAge } from "./ocr-fields";
+import { extractUidAndAge, extractGaugeRiskLevels } from "./ocr-fields";
 import { bodySystemFor } from "./body-system";
 import {
   parsePersonalInformation,
@@ -115,6 +115,23 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
   // ---- Food sensitivity / metabolism ----
   const foodSensitivitySourcePages = [metabolismPage, foodSensitivityPage].filter((p): p is number => p != null);
   const food_sensitivity = parseFoodSensitivityMetabolism(foodSensitivitySourcePages.map((p) => linesByPage[p - 1]));
+
+  // Risk level for these categories is printed as a label on a thermometer
+  // graphic (vector art, right-hand side of the page) rather than as
+  // extractable text — confirmed via a direct text-item dump (zero items in
+  // that region at all), the same category of problem as the page-1 UID
+  // line. Only OCR the categories the text-based parse didn't already find
+  // a risk word for, keeping OCR usage as narrow as possible.
+  const categoryTitleRe = /^[A-Z][a-zA-Z ]+(?:Intolerance|Resistance)$/;
+  for (const p of foodSensitivitySourcePages) {
+    if (food_sensitivity.every((f) => f.risk_level !== null)) break;
+    const gaugeLevels = await extractGaugeRiskLevels(pdf, p, items[p - 1], categoryTitleRe);
+    for (const item of food_sensitivity) {
+      if (item.risk_level === null && gaugeLevels.has(item.name)) {
+        item.risk_level = gaugeLevels.get(item.name) ?? null;
+      }
+    }
+  }
 
   // ---- Fitness: exercise + musculoskeletal ----
   const exercise = fitnessPage ? parseExercise(linesByPage[fitnessPage - 1]).map((r) => ({ recommendation: r })) : [];
