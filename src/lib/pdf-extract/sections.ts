@@ -103,6 +103,20 @@ export interface FoodSensitivityItem {
   recommendations: string[];
 }
 
+// Finds a Low/Mild/Moderate/High word within ~20 characters of `nearPattern`
+// (e.g. "risk"/"intolerance"/"resistance" — the source phrases this
+// differently per category: "moderate risk" vs. "moderate intolerance").
+// Returns null (not a guess) when no such word appears at all — some
+// categories genuinely have no risk-level wording anywhere in their text.
+function findRiskWordNear(text: string, nearPattern: RegExp): string | null {
+  const riskWordSrc = "(low|mild|moderate|high)";
+  const before = text.match(new RegExp(`\\b${riskWordSrc}\\b(?:\\s+\\S+){0,3}\\s+(?:${nearPattern.source})`, "i"));
+  if (before) return before[1].toLowerCase();
+  const after = text.match(new RegExp(`(?:${nearPattern.source})\\s+(?:\\S+\\s+){0,3}\\b${riskWordSrc}\\b`, "i"));
+  if (after) return after[1].toLowerCase();
+  return null;
+}
+
 export function parseFoodSensitivityMetabolism(pagesLines: string[][]): FoodSensitivityItem[] {
   const text = cleanFooter(pagesLines.map((l) => l.join("\n")).join("\n"));
   const categoryRe = /^([A-Z][a-zA-Z ]+(?:Intolerance|Resistance))$/gm;
@@ -120,8 +134,8 @@ export function parseFoodSensitivityMetabolism(pagesLines: string[][]): FoodSens
       .split("•")
       .map((s) => s.replace(/\n/g, " ").trim())
       .filter(Boolean);
-    const riskMatch = block.match(/\b(low|mild|moderate|high)\b.{0,20}\brisk\b/i) || block.match(/\brisk\b.{0,20}\b(low|mild|moderate|high)\b/i);
-    results.push({ name, risk_level: riskMatch ? riskMatch[1].toLowerCase() : null, narrative, recommendations });
+    const risk_level = findRiskWordNear(block, /risk|intolerance|resistance|sensitivity/i);
+    results.push({ name, risk_level, narrative, recommendations });
   }
   return results;
 }
