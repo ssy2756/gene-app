@@ -1,23 +1,21 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import type { DisplayReport } from "@/lib/report-mapping";
 import { ReportApp } from "@/components/report/ReportApp";
 
-export default function Home() {
-  const router = useRouter();
+export default function HomePage() {
+  const navigate = useNavigate();
   const [report, setReport] = useState<DisplayReport | null>(null);
   const [checking, setChecking] = useState(true);
 
   const loadMyReport = useCallback(async () => {
     const res = await fetch("/api/reports/me");
     if (!res.ok) {
-      router.replace("/login");
+      navigate("/login", { replace: true });
       return;
     }
     return (await res.json()) as DisplayReport;
-  }, [router]);
+  }, [navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +33,7 @@ export default function Home() {
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
+    navigate("/login", { replace: true });
   }
 
   if (checking) {

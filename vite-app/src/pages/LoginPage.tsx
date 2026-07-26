@@ -1,11 +1,8 @@
-"use client";
-
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [uid, setUid] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +22,7 @@ export default function LoginPage() {
         setError(data.error ?? "Could not find a report for this UID");
         return;
       }
-      router.push("/");
+      navigate("/");
     } finally {
       setLoading(false);
     }
@@ -33,7 +30,7 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-8 bg-[#f6f4f8] p-6">
-      <Image src="/genepowerx-logo.svg" alt="GenepowerX" width={175} height={41} priority />
+      <img src="/genepowerx-logo.svg" alt="GenepowerX" width={175} height={41} />
       <div className="w-full rounded-2xl bg-white p-6 shadow-[0_2px_8px_rgba(58,47,136,.05)]">
         <h1 className="text-xl font-semibold text-[#2b2540]">Look up your report</h1>
         <p className="mt-1 text-[13px] text-[#8a819c]">

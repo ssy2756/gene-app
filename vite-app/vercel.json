@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://gene-app-y35n.vercel.app/api/$1" }
+  ]
+}
