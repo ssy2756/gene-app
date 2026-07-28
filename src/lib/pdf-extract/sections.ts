@@ -45,16 +45,81 @@ const GLOSSARY_NAME_ALIASES: Record<string, string> = {
   "cholesterol disorders": "hypertriglyceridemia",
   "mood disorders": "mood disorder",
   "thyroid disorders": "thyroid",
+  "thyroid (hypo and hyper)": "thyroid",
+  // These two names wrap across a line break that lands *inside* the
+  // glossary's own description column (e.g. "Alzheimer's Disease /" ...
+  // description text... "Dementia"), so the full name never appears as one
+  // contiguous substring even after whitespace normalization — anchor on
+  // just the unique leading fragment instead.
+  "alzheimer's disease / dementia": "alzheimer's disease",
+  "chronic kidney disease": "chronic kidney",
 };
 
-export function findGenesAnalyzed(glossaryText: string, conditionName: string): number | null {
+// Multi-word condition names sometimes wrap across separate y-positioned
+// lines on the glossary page ("Alzheimer's Disease /" / "Dementia", "Chronic
+// Kidney" / "Disease") and reconstructLines joins those with a newline, not
+// a space — collapse all whitespace (including newlines) before comparing
+// so a name given as one space-joined string still matches.
+function normalizeWs(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function locateInGlossary(glossaryText: string, conditionName: string): { normalized: string; idx: number } {
   const key = conditionName.trim().toLowerCase();
-  const searchTerm = GLOSSARY_NAME_ALIASES[key] ?? key;
-  const idx = glossaryText.toLowerCase().indexOf(searchTerm);
+  const searchTerm = normalizeWs(GLOSSARY_NAME_ALIASES[key] ?? key);
+  const normalized = normalizeWs(glossaryText.toLowerCase());
+  return { normalized, idx: normalized.indexOf(searchTerm) };
+}
+
+export function findGenesAnalyzed(glossaryText: string, conditionName: string): number | null {
+  const { normalized, idx } = locateInGlossary(glossaryText, conditionName);
   if (idx === -1) return null;
-  const window = glossaryText.slice(idx, idx + 400);
-  const m = window.match(/Genes\s*[-–]\s*\((\d+)\)/i);
+  const window = normalized.slice(idx, idx + 400);
+  const m = window.match(/genes\s*[-–]\s*\((\d+)\)/i);
   return m ? Number(m[1]) : null;
+}
+
+// This report template always lists the same fixed set of conditions in its
+// "CONDITIONS / RISK / GLOSSARY OF MEDICAL CONDITIONS" pages (see
+// body-system.ts's header comment) — every one of them gets a colored risk
+// badge there, but only some also get a full "You have X genetic risk for
+// Y" narrative elsewhere (in MEDICAL CONCERNS ANSWERED, or the
+// musculoskeletal/immune/cancer sections). The rest (e.g. Arrhythmias,
+// Alzheimer's Disease/Dementia, Chronic Kidney Disease) are real,
+// risk-assessed conditions in the report that would otherwise be silently
+// dropped just because their risk level isn't in the narrative text — this
+// finds which known glossary conditions a given set of narratives doesn't
+// already cover, so their (OCR'd) badge-only risk level can be added too.
+const KNOWN_GLOSSARY_CONDITIONS = [
+  "Diabetes",
+  "Hypertension",
+  "Coronary Artery Disease",
+  "Hypertriglyceridemia",
+  "Cardiomyopathy",
+  "Arrhythmias",
+  "Obesity/Weight Gain",
+  "Thyroid (Hypo and Hyper)",
+  "Alzheimer's Disease / Dementia",
+  "Stroke",
+  "Chronic Kidney Disease",
+  "Mood Disorder",
+  "Fatty Liver",
+  "Gallstones",
+  "Musculoskeletal Issues",
+];
+
+function glossaryKeyFor(name: string): string {
+  const key = name.trim().toLowerCase();
+  return GLOSSARY_NAME_ALIASES[key] ?? key;
+}
+
+export function findUnaddressedGlossaryConditions(narratives: ConditionNarrative[]): string[] {
+  const covered = new Set(narratives.map((n) => glossaryKeyFor(n.condition)));
+  // Musculoskeletal is always sourced separately from the fitness page, not
+  // the glossary badge, even when no musculoskeletal narrative was found.
+  return KNOWN_GLOSSARY_CONDITIONS.filter(
+    (name) => glossaryKeyFor(name) !== "musculoskeletal issues" && !covered.has(glossaryKeyFor(name))
+  );
 }
 
 // ---- Medical concerns (condition risk narrative, pages 6-11 + fitness page 21) ----
@@ -66,30 +131,59 @@ export interface ConditionNarrative {
   recommendations: string[];
 }
 
+// Shared by both the real-text-layer parse (below) and the OCR fallback
+// (index.ts, for pages where a card's text has no extractable Unicode at
+// all — a broken font encoding, confirmed by a zero-text-item dump —
+// distinct from vector-art cases that need a small targeted crop instead).
+// OCR output is noisy: bullet glyphs rarely come through as a literal "•",
+// and both decorative page elements and the *next* card's own title
+// (reading order puts it right after this card's recommendations) can
+// bleed in as stray fragments. "Recommendations" is a reliable anchor even
+// when the bullets around it aren't; requiring an actual recommendation
+// verb filters out those stray fragments rather than trusting anything
+// bullet/newline-shaped.
+function splitNarrativeAndRecommendations(block: string): { narrative: string; recommendations: string[] } {
+  const bulletStart = block.search(/•/);
+  const recHeaderMatch = block.match(/Recommendations\s*:?/i);
+  const recHeaderStart = recHeaderMatch?.index;
+  const splitPoints = [bulletStart, recHeaderStart].filter((n): n is number => n !== undefined && n >= 0);
+  if (splitPoints.length === 0) {
+    return { narrative: block.replace(/\n/g, " ").trim(), recommendations: [] };
+  }
+  const splitAt = Math.min(...splitPoints);
+  const narrative = block.slice(0, splitAt).replace(/\n/g, " ").trim();
+  const recommendations = block
+    .slice(splitAt)
+    .replace(/Recommendations\s*:?/i, "")
+    .split(/•|\n/)
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .filter((s) => s.length >= 10 && /\b(recommend|monitor|maintain|follow|limit|avoid|check|screen)\w*\b/i.test(s));
+  return { narrative, recommendations };
+}
+
+export function parseConcernsBlock(rawText: string): ConditionNarrative[] {
+  const results: ConditionNarrative[] = [];
+  const text = cleanFooter(rawText);
+  const re = /You have (Low|Mild|Moderate to [Hh]igh|Moderate|High) genetic risk for ([^.]+)\./gi;
+  const matches = [...text.matchAll(re)];
+  for (let i = 0; i < matches.length; i++) {
+    const risk_level = matches[i][1];
+    // OCR occasionally mangles a curly apostrophe or misses a straight one
+    // in a condition name — normalize to a plain apostrophe so downstream
+    // lookups (body-system, genes-analyzed) match reliably.
+    const condition = matches[i][2].trim().replace(/[’‘]/g, "'");
+    const start = matches[i].index!;
+    const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
+    const { narrative, recommendations } = splitNarrativeAndRecommendations(text.slice(start, end));
+    results.push({ condition, risk_level, narrative, recommendations });
+  }
+  return results;
+}
+
 export function parseMedicalConcerns(pagesLines: string[][]): ConditionNarrative[] {
   const results: ConditionNarrative[] = [];
   for (const lines of pagesLines) {
-    const text = cleanFooter(lines.join("\n"));
-    const re = /You have (Low|Mild|Moderate|High) genetic risk for ([^.]+)\./gi;
-    const matches = [...text.matchAll(re)];
-    for (let i = 0; i < matches.length; i++) {
-      const risk_level = matches[i][1];
-      const condition = matches[i][2].trim();
-      const start = matches[i].index!;
-      const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
-      const block = text.slice(start, end);
-      const bulletStart = block.search(/•/);
-      const narrative = (bulletStart >= 0 ? block.slice(0, bulletStart) : block).replace(/\n/g, " ").trim();
-      const recommendations =
-        bulletStart >= 0
-          ? block
-              .slice(bulletStart)
-              .split("•")
-              .map((s) => s.replace(/\n/g, " ").trim())
-              .filter(Boolean)
-          : [];
-      results.push({ condition, risk_level, narrative, recommendations });
-    }
+    results.push(...parseConcernsBlock(lines.join("\n")));
   }
   return results;
 }

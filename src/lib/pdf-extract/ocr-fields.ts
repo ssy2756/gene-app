@@ -89,6 +89,74 @@ export async function extractUidAndAge(
   }
 }
 
+// The "CONDITIONS / RISK / GLOSSARY OF MEDICAL CONDITIONS" pages print a
+// colored risk badge for every condition (including ones that never get a
+// "You have X genetic risk for Y" narrative elsewhere in the report), but
+// that badge is vector art with zero underlying text — confirmed via a
+// direct text-item dump (the RISK column, x roughly 110-226, has no text
+// items at all; only the bottom legend row "Low Mild Moderate Moderate to
+// high" is real text). Each row's "Genes - (N)" line IS real text and the
+// gene count is unique per condition, so rows are keyed by that count
+// rather than by trying to OCR or re-parse the condition name.
+const GLOSSARY_GENES_RE = /^Genes\s*[-–]\s*\((\d+)\)$/;
+
+export async function extractGlossaryRiskLevels(
+  pdf: PdfDocument,
+  pageNum: number,
+  pageItems: Item[]
+): Promise<Map<number, string | null>> {
+  const results = new Map<number, string | null>();
+  const rows = pageItems
+    .map((i) => ({ item: i, match: i.str.trim().match(GLOSSARY_GENES_RE) }))
+    .filter((r): r is { item: Item; match: RegExpMatchArray } => r.match !== null)
+    .map((r) => ({ genes: Number(r.match[1]), y: r.item.y }))
+    .sort((a, b) => b.y - a.y);
+  if (rows.length === 0) return results;
+
+  await ensureFontsRegistered();
+
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 1 });
+  const scale = 3;
+
+  const pngBuffer = await renderPageAsImage(pdf, pageNum, { scale, canvasImport: () => import("@napi-rs/canvas") });
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const img = await loadImage(Buffer.from(pngBuffer));
+
+  const xLeft = 108;
+  const xRight = 227;
+  const pxLeft = Math.max(0, Math.floor(xLeft * scale));
+  const pxRight = Math.min(img.width, Math.ceil(xRight * scale));
+  const cropWidth = pxRight - pxLeft;
+
+  const worker = await createWorker("eng", 1, {
+    langPath: engTrainedData.langPath,
+    gzip: engTrainedData.gzip,
+    cachePath: "/tmp",
+  });
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const top = i === 0 ? rows[i].y + 40 : (rows[i - 1].y + rows[i].y) / 2;
+      const bottom = i + 1 < rows.length ? (rows[i].y + rows[i + 1].y) / 2 : rows[i].y - 40;
+      const pxTop = Math.max(0, Math.floor((viewport.height - top) * scale));
+      const pxBottom = Math.min(img.height, Math.ceil((viewport.height - bottom) * scale));
+      const cropHeight = pxBottom - pxTop;
+      if (cropHeight <= 0 || cropWidth <= 0) continue;
+
+      const canvas = createCanvas(cropWidth, cropHeight);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, -pxLeft, -pxTop);
+      const cropBuffer = await canvas.encode("png");
+      const { data } = await worker.recognize(cropBuffer);
+      const match = data.text.match(/\b(low|mild|moderate to high|moderate|high)\b/i);
+      results.set(rows[i].genes, match ? match[1].toLowerCase() : null);
+    }
+  } finally {
+    await worker.terminate();
+  }
+  return results;
+}
+
 // Some pages print a risk-level word ("Mild"/"Low"/"Moderate"/"High") only
 // as a label next to a thermometer-gauge graphic, not as extractable text —
 // confirmed via a direct text-item dump (zero items anywhere in the right
@@ -146,4 +214,27 @@ export async function extractGaugeRiskLevels(
     await worker.terminate();
   }
   return results;
+}
+
+// A small number of "You have X genetic risk for Y..." cards on the medical
+// concerns pages have zero extractable text items at all — not vector art
+// (they render as normal-looking text visually), but a broken/missing
+// ToUnicode mapping for that specific text run, confirmed by a direct
+// text-item dump (0 items for that card, vs dozens for a normal card on the
+// same page). OCR-ing the whole page is the only way to recover them, since
+// there's no real text position to anchor a small crop to.
+export async function extractFullPageText(pdf: PdfDocument, pageNum: number): Promise<string> {
+  await ensureFontsRegistered();
+  const pngBuffer = await renderPageAsImage(pdf, pageNum, { scale: 3, canvasImport: () => import("@napi-rs/canvas") });
+  const worker = await createWorker("eng", 1, {
+    langPath: engTrainedData.langPath,
+    gzip: engTrainedData.gzip,
+    cachePath: "/tmp",
+  });
+  try {
+    const { data } = await worker.recognize(Buffer.from(pngBuffer));
+    return data.text;
+  } finally {
+    await worker.terminate();
+  }
 }
