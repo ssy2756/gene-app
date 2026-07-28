@@ -152,13 +152,50 @@ function splitNarrativeAndRecommendations(block: string): { narrative: string; r
   }
   const splitAt = Math.min(...splitPoints);
   const narrative = block.slice(0, splitAt).replace(/\n/g, " ").trim();
+  const recVerbRe = /\b(recommend|monitor|maintain|follow|limit|avoid|check|screen)\w*\b/i;
   const recommendations = block
     .slice(splitAt)
     .replace(/Recommendations\s*:?/i, "")
     .split(/•|\n/)
     .map((s) => s.replace(/\s+/g, " ").trim())
-    .filter((s) => s.length >= 10 && /\b(recommend|monitor|maintain|follow|limit|avoid|check|screen)\w*\b/i.test(s));
+    .filter((s) => s.length >= 10 && recVerbRe.test(s));
   return { narrative, recommendations };
+}
+
+// Tesseract routinely inserts small stray tokens mid-sentence (stray
+// bracket+letter fragments like "[a") and appends a trailing garbled
+// fragment with no sentence-ending period after the real content — cutting
+// each string down to its complete, period-terminated sentence(s) reliably
+// drops that trailing noise (it never has a period of its own), and
+// stripping bracket fragments cleans up what mid-sentence noise remains.
+// Only applied to OCR'd text (index.ts) — the real text-layer parse above
+// doesn't have this noise and some narratives legitimately run past two
+// sentences, so truncating there would cut off real content.
+// The "Low"-risk boilerplate sentence is identical across every condition
+// on this template ("You have no clinically significant mutations for
+// genes related to this condition.") — recognizing it loosely and
+// rewriting it exactly fixes mid-sentence OCR noise a generic cleanup
+// can't catch (e.g. a stray "3 Mog," or "-" injected between real words),
+// without guessing at content that isn't already known verbatim.
+const LOW_RISK_BOILERPLATE_RE =
+  /you have no\b[\s\S]{0,15}clinically[\s\S]{0,15}significant mutations[\s\S]{0,40}for genes related to this condition\.?/i;
+const LOW_RISK_BOILERPLATE = "You have no clinically significant mutations for genes related to this condition.";
+
+export function cleanOcrText(s: string, maxSentences: number): string {
+  const stripped = s
+    .replace(/\[[a-zA-Z]?\]?/g, " ")
+    .replace(LOW_RISK_BOILERPLATE_RE, LOW_RISK_BOILERPLATE)
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentences = stripped.match(/[^.]+\./g);
+  if (!sentences) return stripped;
+  return sentences.slice(0, maxSentences).join(" ").replace(/\s+/g, " ").trim();
+}
+
+export function cleanOcrRecommendation(s: string): string {
+  const recVerbRe = /\b(recommend|monitor|maintain|follow|limit|avoid|check|screen)\w*\b/i;
+  const idx = s.search(recVerbRe);
+  return cleanOcrText(idx >= 0 ? s.slice(idx) : s, 1);
 }
 
 export function parseConcernsBlock(rawText: string): ConditionNarrative[] {

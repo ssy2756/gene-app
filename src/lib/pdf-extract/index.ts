@@ -9,6 +9,8 @@ import {
   findUnaddressedGlossaryConditions,
   parseMedicalConcerns,
   parseConcernsBlock,
+  cleanOcrText,
+  cleanOcrRecommendation,
   parseFoodSensitivityMetabolism,
   parseExercise,
   parseMusculoskeletal,
@@ -90,7 +92,11 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
       const key = found.condition.trim().toLowerCase();
       if (!narratedNames.has(key)) {
         narratedNames.add(key);
-        narratives.push(found);
+        narratives.push({
+          ...found,
+          narrative: cleanOcrText(found.narrative, 2),
+          recommendations: found.recommendations.map(cleanOcrRecommendation),
+        });
       }
     }
   }
