@@ -38,6 +38,29 @@ const isHeaderRow = (r: string[]) => r[0] === "Molecule Class" && r[1] === "Drug
 const isEmptyRow = (r: string[]) => r.every((c) => !c);
 const isSpacerRow = (r: string[]) => !isHeaderRow(r) && r.slice(1).every((c) => !c);
 
+// A multi-page molecule-class section repeats its "Molecule Class" cell
+// text on each new page it spans, but a wrapped 2-line label sometimes has
+// its second line land in a different table row than our fill-grid
+// bucketing expects, silently truncating the label on later pages (e.g.
+// "Antiemetics (Nausea" instead of "Antiemetics (Nausea and Vomiting
+// Drugs)") — and some sections' continuation-page label drops a trailing
+// abbreviation entirely (e.g. "Anti-Epileptic Drugs" instead of
+// "Anti-Epileptic Drugs (AEDs)"). Both silently split one real category
+// into two in any count/group-by built on molecule_class. This report's
+// category list is a fixed template (same every time), so an explicit
+// alias table — same pattern as GLOSSARY_NAME_ALIASES in sections.ts — is
+// more robust here than a generic fuzzy-match heuristic.
+const MOLECULE_CLASS_ALIASES: Record<string, string> = {
+  "anti-epileptic drugs": "Anti-Epileptic Drugs (AEDs)",
+  transplantation: "Transplantation Drugs",
+  "antiemetics (nausea": "Antiemetics (Nausea and Vomiting Drugs)",
+};
+
+function normalizeMoleculeClass(label: string): string {
+  const trimmed = label.trim();
+  return MOLECULE_CLASS_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 export interface DrugRow {
   molecule_class: string;
   drug: string;
@@ -67,7 +90,7 @@ export async function parseDrugTablePage(pdfjs: PdfJsModule, page: PdfPage, page
   const out: DrugRow[] = [];
   for (const group of groups) {
     if (group.length === 1 && isHeaderRow(group[0])) continue;
-    const label = group.find((r) => r[0])?.[0] ?? "";
+    const label = normalizeMoleculeClass(group.find((r) => r[0])?.[0] ?? "");
     for (const r of group) {
       if (!r[1]) continue;
       out.push({
