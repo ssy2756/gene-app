@@ -265,7 +265,7 @@ function mapMedications(raw: RawReport): MedicationView[] {
     return {
       id: slugify(name),
       name,
-      system: str(pick(d, ["system", "category"]), "General"),
+      system: str(pick(d, ["molecule_class", "drug_class", "system", "category"]), "General"),
       klass: str(pick(d, ["molecule_class", "drug_class"]), "—"),
       gene: str(pick(d, ["gene"]), "—"),
       diplotype: str(pick(d, ["diplotype", "genotype"]), "—"),
