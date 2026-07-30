@@ -221,11 +221,15 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
   // ---- PGx diplotype panel ----
   const diplotypes = diplotypePage ? await parseDiplotypePanel(pdfjs, pdf, diplotypePage, items[diplotypePage - 1]) : [];
 
-  // ---- PGx drug tables ----
+  // ---- PGx drug tables (molecule-class label carried across pages —
+  // see parseDrugTablePage's header comment) ----
   const drug_recommendations = [];
+  let lastMoleculeClass = "";
   for (const p of drugTablePages) {
     const page = await pdf.getPage(p);
-    drug_recommendations.push(...(await parseDrugTablePage(pdfjs, page, items[p - 1])));
+    const result = await parseDrugTablePage(pdfjs, page, items[p - 1], lastMoleculeClass);
+    drug_recommendations.push(...result.rows);
+    lastMoleculeClass = result.lastLabel;
   }
 
   return {
