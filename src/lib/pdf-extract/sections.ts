@@ -20,12 +20,22 @@ export function stripFooterLines(lines: string[]): string[] {
   const out = [...lines];
   while (out.length) {
     const last = out[out.length - 1].trim();
-    if (/^This Report is Confidential and belongs to:?$/i.test(last)) {
+    if (/^This Report is Confidential and belongs to:?/i.test(last)) {
       out.pop();
       continue;
     }
-    if (/^Pateint\s*Name$/i.test(last)) {
+    // Matched by PREFIX, not exact-line: on a report where the name field
+    // is blank (e.g. the local sample this was first verified against),
+    // "Pateint Name" renders as its own bare line. On a report with a real
+    // name filled in, the value is instead reconstructed onto the SAME
+    // line as the label ("Pateint Name Mr. Abbaya Chowdary Kothari") — an
+    // exact-line match silently failed to strip that case at all, which is
+    // exactly how the name leaked into the Exercise list on a real report
+    // despite this function passing verification on the local sample.
+    if (/^Pateint\s*Name\b/i.test(last)) {
       out.pop();
+      // Defensive fallback for a report that instead splits the name onto
+      // its own following line rather than sharing the label's line.
       if (out.length && looksLikeNameLine(out[out.length - 1])) out.pop();
       continue;
     }
@@ -305,34 +315,38 @@ export function parseFoodSensitivityMetabolism(pagesLines: string[][]): FoodSens
 
 // ---- Fitness page (21): Exercise subsection + Musculoskeletal narrative ----
 
-// Each real Exercise entry is either bullet-prefixed ("• Time – 30
-// minutes.") or starts with one of this fixed template's field labels
-// (Frequency/Intensity/Time/Type/Precautions) — but the PDF's own line
-// wrapping means a single long entry (e.g. a wordy "Type -" description)
-// spans multiple physical lines with no bullet/label of their own.
-// Splitting on every newline (as this used to) shredded that one entry
-// into several fragments with the sentence's back half and full stop
-// missing from the piece that kept the label. Only start a new list item
-// on an actual bullet/label line; any other line is a wrapped continuation
-// of the previous item, joined with a space so the sentence stays whole.
-const EXERCISE_LABEL_RE = /^(•\s*)?(Frequency|Intensity|Time|Type|Precautions)\b\s*[-–—:]/i;
-
+// Each real Exercise entry (Frequency/Intensity/Time/Type/Precautions, plus
+// however many sentences a given report's Precautions/Type text runs to)
+// is one physical PDF line UNLESS it's long enough to wrap onto further
+// lines — and there's no reliable bullet or label marker to tell a genuine
+// new entry apart from a wrapped continuation: some real reports have
+// several independent one-sentence entries in a row with no bullet at all
+// (e.g. "Precautions - ...work out." immediately followed by the separate
+// "Adequate hydration. Sleep of 6 to 8 hours every night."), which a
+// label/bullet-based rule wrongly merges together.
+//
+// The rule that actually holds across every observed case: a line only
+// continues the previous entry if the previous line did NOT already end
+// in sentence-terminal punctuation. A finished sentence always starts a
+// fresh entry on the next line; an unfinished one (a page-width wrap
+// mid-sentence) always continues onto it — regardless of whether that next
+// line happens to start with a bullet, a label, or neither.
 export function parseExercise(lines: string[]): string[] {
   const text = cleanFooter(lines.join("\n"));
   const exIdx = text.search(/^Exercise:/m);
   if (exIdx < 0) return [];
   const block = text.slice(exIdx + "Exercise:".length);
   const items: string[] = [];
+  let previousComplete = true;
   for (const rawLine of block.split("\n")) {
-    const line = rawLine.trim();
+    const line = rawLine.trim().replace(/^•\s*/, "");
     if (!line || /^This Report/i.test(line)) continue;
-    const isNewItem = line.startsWith("•") || EXERCISE_LABEL_RE.test(line) || items.length === 0;
-    const cleaned = line.replace(/^•\s*/, "");
-    if (isNewItem) {
-      items.push(cleaned);
+    if (previousComplete) {
+      items.push(line);
     } else {
-      items[items.length - 1] = `${items[items.length - 1]} ${cleaned}`.trim();
+      items[items.length - 1] = `${items[items.length - 1]} ${line}`.trim();
     }
+    previousComplete = /[.!?]$/.test(line);
   }
   return items;
 }
