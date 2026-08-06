@@ -81,6 +81,21 @@ describe("Fitness page parsing — Exercise section + footer stripping", () => {
     ]);
   });
 
+  it("report D: name printed directly under the confidential line with the 'Pateint Name' label omitted entirely (the real report behind the 14-issue integrity failure — every earlier version of stripFooterLines left this footer completely intact, because it scanned backward, found a name rather than a label on the last line, and stopped)", () => {
+    const lines = [
+      "Exercise:",
+      "Frequency - 4 days per week.",
+      "Precautions - Recommend adequate hydration.",
+      "This Report is Confidential and belongs to:",
+      "Mr. Abbaya Chowdary Kothari",
+    ];
+    const result = parseExercise(stripFooterLines(lines));
+    expect(result).toEqual([
+      "Frequency - 4 days per week.",
+      "Precautions - Recommend adequate hydration.",
+    ]);
+  });
+
   it("never lets a name-shaped line leak into the middle of the list when it's genuinely part of a recommendation's own wording", () => {
     // Guard against stripFooterLines being made too aggressive in a future
     // fix — a capitalized multi-word phrase mid-document (not at the very

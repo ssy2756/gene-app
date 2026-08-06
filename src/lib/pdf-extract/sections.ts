@@ -1,56 +1,53 @@
+// Strips the footer from an already-joined string. The "Pateint Name" label
+// and the name value are each independently optional: a report with the
+// name field filled in renders the value *instead of* the label, not after
+// it. Requiring both (as this did originally) meant a filled-in report had
+// its entire footer survive. Only a titled name ("Mr. ...") is consumed
+// inline here, since an untitled one can't be told apart from the next
+// page's opening words in joined text — the line-level strip below handles
+// that case, where the line boundary makes it unambiguous.
 function cleanFooter(s: string): string {
-  return s.replace(/This Report is Confidential and belongs to:?\s*Pateint\s*Name/gi, "").trim();
+  return s
+    .replace(
+      /This Report is Confidential and belongs to:?\s*(Pateint\s*Name)?\s*((?:Mr|Mrs|Ms|Dr|Miss)\.?\s+[A-Z][a-zA-Z'.-]*(?:\s+[A-Z][a-zA-Z'.-]*){0,4})?/gi,
+      "",
+    )
+    .replace(/^\s*Pateint\s*Name\s*$/gim, "")
+    .trim();
 }
 
-// Every page's footer is the fixed 2-3 line block "This Report is
-// Confidential and belongs to:" / "Pateint Name" / <the actual patient
-// name, when the template has a value filled in for it>, printed at the
-// bottom of the page (lowest y). cleanFooter() only strips the label text
-// from an already-joined string, which leaves the name value dangling —
-// it then survives into whatever section happens to be parsed last on
-// that page (confirmed: it leaked into the Exercise section's recommendation
-// list on the fitness page). Stripping these lines from the raw
-// per-page line array, before any section parser sees it, removes the
-// footer (and its trailing name, when present) everywhere at once instead
-// of patching every downstream parser individually.
-const looksLikeNameLine = (s: string) =>
-  /^(Mr\.|Mrs\.|Ms\.|Dr\.)?\s*[A-Z][a-zA-Z'.-]*(\s+[A-Z][a-zA-Z'.-]*){0,4}$/.test(s.trim());
+// Stripping the footer from the raw per-page line array, before any section
+// parser sees it, removes it everywhere at once — rather than leaving each
+// downstream parser to cope with it (which is how it leaked into the
+// Exercise list, the diet plan, and the cancer biomarker list separately).
+//
+// Matches either fixed label the footer block can open with. Prefix-matched,
+// not exact, so a name rendered onto the same line as a label still matches.
+const FOOTER_LABEL_RE = /^(This Report is Confidential and belongs to:?|Pateint\s*Name\b)/i;
 
+// The footer block is at most three lines (confidential line / "Pateint
+// Name" label / the name value) and always sits at the page bottom, so
+// nothing legitimate can follow it. Anchoring on the labels and discarding
+// everything after the first one found is layout-independent — it does not
+// care whether the name is absent, on its own line, merged onto a label, or
+// (as a real report turned out to render it) printed directly under the
+// confidential line with the label omitted entirely.
+//
+// Three previous versions of this function each enumerated the layouts
+// they'd been shown and broke on the next one, because they scanned
+// backward from the last line and gave up the moment it wasn't a label —
+// which is exactly what a filled-in name field looks like. Truncating at
+// the label instead removes whatever trails it without having to recognize
+// the trailing value at all.
 export function stripFooterLines(lines: string[]): string[] {
-  const out = [...lines];
-  // The two prior attempts at this both assumed the name (when the field
-  // isn't blank) shares a line with the "Pateint Name" label or is popped
-  // as part of the same backward scan as the label lines. Both screenshots
-  // from the real report actually show the name surviving whole and
-  // untouched as its own trailing line, printed BELOW "Pateint Name" —
-  // meaning it's the bottom-most line in the array, and a scan that starts
-  // by checking the last line against the footer-LABEL patterns finds no
-  // match there at all and gives up immediately, never even looking at the
-  // label lines sitting above it. Check for this specific shape first —
-  // last line looks like a name AND the line directly above it is the
-  // "Pateint Name" label — before doing the ordinary backward label scan.
-  if (
-    out.length >= 2 &&
-    looksLikeNameLine(out[out.length - 1]) &&
-    /^Pateint\s*Name\b/i.test(out[out.length - 2].trim())
-  ) {
-    out.pop();
-  }
-  while (out.length) {
-    const last = out[out.length - 1].trim();
-    if (/^This Report is Confidential and belongs to:?/i.test(last)) {
-      out.pop();
-      continue;
+  const FOOTER_MAX_LINES = 3;
+  const windowStart = Math.max(0, lines.length - FOOTER_MAX_LINES);
+  for (let i = windowStart; i < lines.length; i++) {
+    if (FOOTER_LABEL_RE.test(lines[i].trim())) {
+      return lines.slice(0, i);
     }
-    // Matched by PREFIX, not exact-line, in case a report instead renders
-    // the name onto the SAME line as the label ("Pateint Name Mr. ...").
-    if (/^Pateint\s*Name\b/i.test(last)) {
-      out.pop();
-      continue;
-    }
-    break;
   }
-  return out;
+  return [...lines];
 }
 
 // Splits a bullet-list block into items WITHOUT treating every PDF line
