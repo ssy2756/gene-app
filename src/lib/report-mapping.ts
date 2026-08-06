@@ -419,12 +419,17 @@ function mapFitness(raw: RawReport): { headline: string; sub: string; tips: stri
   });
   // Real reports describe the musculoskeletal profile via "narrative"/
   // "risk_level" only, no dedicated headline field — use the risk_level as
-  // a short label and the narrative as the supporting detail line.
+  // a short label for the card title.
+  //
+  // The narrative itself (the full "You have homozygous, clinically
+  // significant mutations..." paragraph) is intentionally NOT surfaced as
+  // `sub` here — it's condition-level detail that's already shown on the
+  // Health Risks screen for this same condition, so repeating it under
+  // Lifestyle's "Fitness & exercise" card is redundant, not missing data.
   const risk = str(pick(musculo, ["risk_level", "level"]), "");
-  const narrative = str(pick(musculo, ["narrative", "detail", "genes"]), "");
   return {
     headline: str(pick(musculo, ["profile", "type"]), risk || "Fitness profile"),
-    sub: narrative,
+    sub: "",
     tips: [...musculoTips, ...exerciseTips],
   };
 }

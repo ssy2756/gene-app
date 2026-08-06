@@ -19,6 +19,7 @@ import {
   parseImmuneHealth,
   parseHereditaryCancer,
   deriveRiskFromTestResult,
+  stripFooterLines,
   type ConditionNarrative,
 } from "./sections";
 import { parseDiplotypePanel, parseDrugTablePage, parseMethylationPage, parseReferencesPage, parseBiomarkersPages } from "./tables";
@@ -40,7 +41,11 @@ export async function extractReportPdf(pdfBuffer: Buffer): Promise<Record<string
   const pdfjs = await getResolvedPDFJS();
   const { items } = await extractTextItems(pdf);
 
-  const linesByPage = items.map((pageItems) => reconstructLines(pageItems).filter((l) => l.trim()));
+  // Every page's bottom-of-page footer ("This Report is Confidential and
+  // belongs to: Pateint Name <value>") is stripped here, once, from the
+  // raw per-page lines — before any section parser runs — rather than
+  // patched per-parser downstream (see stripFooterLines's header comment).
+  const linesByPage = items.map((pageItems) => stripFooterLines(reconstructLines(pageItems).filter((l) => l.trim())));
   const firsts = firstLines(linesByPage);
 
   // ---- Locate section page-ranges by header text, not fixed numbers ----

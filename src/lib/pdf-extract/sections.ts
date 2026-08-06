@@ -2,6 +2,38 @@ function cleanFooter(s: string): string {
   return s.replace(/This Report is Confidential and belongs to:?\s*Pateint\s*Name/gi, "").trim();
 }
 
+// Every page's footer is the fixed 2-3 line block "This Report is
+// Confidential and belongs to:" / "Pateint Name" / <the actual patient
+// name, when the template has a value filled in for it>, printed at the
+// bottom of the page (lowest y). cleanFooter() only strips the label text
+// from an already-joined string, which leaves the name value dangling —
+// it then survives into whatever section happens to be parsed last on
+// that page (confirmed: it leaked into the Exercise section's recommendation
+// list on the fitness page). Stripping these lines from the raw
+// per-page line array, before any section parser sees it, removes the
+// footer (and its trailing name, when present) everywhere at once instead
+// of patching every downstream parser individually.
+const looksLikeNameLine = (s: string) =>
+  /^(Mr\.|Mrs\.|Ms\.|Dr\.)?\s*[A-Z][a-zA-Z'.-]*(\s+[A-Z][a-zA-Z'.-]*){0,4}$/.test(s.trim());
+
+export function stripFooterLines(lines: string[]): string[] {
+  const out = [...lines];
+  while (out.length) {
+    const last = out[out.length - 1].trim();
+    if (/^This Report is Confidential and belongs to:?$/i.test(last)) {
+      out.pop();
+      continue;
+    }
+    if (/^Pateint\s*Name$/i.test(last)) {
+      out.pop();
+      if (out.length && looksLikeNameLine(out[out.length - 1])) out.pop();
+      continue;
+    }
+    break;
+  }
+  return out;
+}
+
 // ---- Personal information (page 1) ----
 
 export function parsePersonalInformation(lines: string[]) {
@@ -273,15 +305,36 @@ export function parseFoodSensitivityMetabolism(pagesLines: string[][]): FoodSens
 
 // ---- Fitness page (21): Exercise subsection + Musculoskeletal narrative ----
 
+// Each real Exercise entry is either bullet-prefixed ("• Time – 30
+// minutes.") or starts with one of this fixed template's field labels
+// (Frequency/Intensity/Time/Type/Precautions) — but the PDF's own line
+// wrapping means a single long entry (e.g. a wordy "Type -" description)
+// spans multiple physical lines with no bullet/label of their own.
+// Splitting on every newline (as this used to) shredded that one entry
+// into several fragments with the sentence's back half and full stop
+// missing from the piece that kept the label. Only start a new list item
+// on an actual bullet/label line; any other line is a wrapped continuation
+// of the previous item, joined with a space so the sentence stays whole.
+const EXERCISE_LABEL_RE = /^(•\s*)?(Frequency|Intensity|Time|Type|Precautions)\b\s*[-–—:]/i;
+
 export function parseExercise(lines: string[]): string[] {
   const text = cleanFooter(lines.join("\n"));
   const exIdx = text.search(/^Exercise:/m);
   if (exIdx < 0) return [];
   const block = text.slice(exIdx + "Exercise:".length);
-  return block
-    .split(/[•\n]/)
-    .map((s) => s.trim())
-    .filter((s) => s && !/^This Report/i.test(s));
+  const items: string[] = [];
+  for (const rawLine of block.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || /^This Report/i.test(line)) continue;
+    const isNewItem = line.startsWith("•") || EXERCISE_LABEL_RE.test(line) || items.length === 0;
+    const cleaned = line.replace(/^•\s*/, "");
+    if (isNewItem) {
+      items.push(cleaned);
+    } else {
+      items[items.length - 1] = `${items[items.length - 1]} ${cleaned}`.trim();
+    }
+  }
+  return items;
 }
 
 export interface MusculoskeletalNarrative {
