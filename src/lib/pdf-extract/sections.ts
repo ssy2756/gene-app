@@ -18,25 +18,34 @@ const looksLikeNameLine = (s: string) =>
 
 export function stripFooterLines(lines: string[]): string[] {
   const out = [...lines];
+  // The two prior attempts at this both assumed the name (when the field
+  // isn't blank) shares a line with the "Pateint Name" label or is popped
+  // as part of the same backward scan as the label lines. Both screenshots
+  // from the real report actually show the name surviving whole and
+  // untouched as its own trailing line, printed BELOW "Pateint Name" —
+  // meaning it's the bottom-most line in the array, and a scan that starts
+  // by checking the last line against the footer-LABEL patterns finds no
+  // match there at all and gives up immediately, never even looking at the
+  // label lines sitting above it. Check for this specific shape first —
+  // last line looks like a name AND the line directly above it is the
+  // "Pateint Name" label — before doing the ordinary backward label scan.
+  if (
+    out.length >= 2 &&
+    looksLikeNameLine(out[out.length - 1]) &&
+    /^Pateint\s*Name\b/i.test(out[out.length - 2].trim())
+  ) {
+    out.pop();
+  }
   while (out.length) {
     const last = out[out.length - 1].trim();
     if (/^This Report is Confidential and belongs to:?/i.test(last)) {
       out.pop();
       continue;
     }
-    // Matched by PREFIX, not exact-line: on a report where the name field
-    // is blank (e.g. the local sample this was first verified against),
-    // "Pateint Name" renders as its own bare line. On a report with a real
-    // name filled in, the value is instead reconstructed onto the SAME
-    // line as the label ("Pateint Name Mr. Abbaya Chowdary Kothari") — an
-    // exact-line match silently failed to strip that case at all, which is
-    // exactly how the name leaked into the Exercise list on a real report
-    // despite this function passing verification on the local sample.
+    // Matched by PREFIX, not exact-line, in case a report instead renders
+    // the name onto the SAME line as the label ("Pateint Name Mr. ...").
     if (/^Pateint\s*Name\b/i.test(last)) {
       out.pop();
-      // Defensive fallback for a report that instead splits the name onto
-      // its own following line rather than sharing the label's line.
-      if (out.length && looksLikeNameLine(out[out.length - 1])) out.pop();
       continue;
     }
     break;
