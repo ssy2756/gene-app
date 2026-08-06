@@ -53,6 +53,64 @@ export function stripFooterLines(lines: string[]): string[] {
   return out;
 }
 
+// Splits a bullet-list block into items WITHOUT treating every PDF line
+// wrap as an item boundary.
+//
+// Every parser here used to do `.split(/•|\n/)`, which is wrong for the same
+// reason it was wrong in parseExercise: this document wraps a single bullet
+// across several physical lines, and the wrapped remainder is not a new
+// item. That produced two distinct corruptions at once — items chopped off
+// mid-sentence ("...follow up with a"), and, wherever the caller also
+// filtered items by a keyword, the orphaned remainder being *silently
+// deleted* rather than merely mis-split.
+//
+// The boundary signal, verified against this document's actual geometry, is
+// sentence completion, not indentation or vertical gap (the y-gap between
+// two genuinely separate items and within a wrapped sentence are both 18pt
+// here, so geometry cannot distinguish them). A line begins a new item only
+// if it carried a bullet glyph, or the item before it already ended in
+// terminal punctuation.
+export function splitBulletItems(block: string): string[] {
+  const items: string[] = [];
+  let previousComplete = true;
+  for (const rawSegment of block.split("\n")) {
+    // A single physical line can hold more than one bullet; each glyph
+    // after the first unconditionally starts a new item.
+    const segments = rawSegment.split("•");
+    segments.forEach((segment, i) => {
+      const line = segment.replace(/\s+/g, " ").trim();
+      if (!line) return;
+      if (i > 0 || previousComplete || items.length === 0) {
+        items.push(line);
+      } else {
+        items[items.length - 1] = `${items[items.length - 1]} ${line}`;
+      }
+      previousComplete = /[.!?:]$/.test(line);
+    });
+  }
+  return items;
+}
+
+// Reading order puts the *next* page's banner heading immediately after the
+// last bullet of the previous section, so it gets appended onto that bullet
+// by the wrap-joining above (confirmed: "...plant-based proteins. YOUR FOOD
+// SENSITIVITY" and "...Limit the intake of snacks. NOURISH & THRIVE :
+// DIETARY INSIGHTS"). These banners are always set in full caps, which no
+// running prose in this document is, so a trailing all-caps run is an
+// unambiguous marker for them.
+export function stripTrailingHeading(item: string): string {
+  return item.replace(/\s+[A-Z][A-Z&:,'\-\s]{6,}$/, "").trim();
+}
+
+// When the banner heading lands after a bullet that already ended in a full
+// stop, it becomes an item of its own instead of a suffix, so trimming
+// can't reach it — such an item is entirely caps and must be dropped.
+// Requires two words so a legitimate one-word acronym bullet is kept.
+export function isHeadingOnly(item: string): boolean {
+  const t = item.trim();
+  return /^[A-Z][A-Z&:,'\-\s]*$/.test(t) && /\s/.test(t);
+}
+
 // ---- Personal information (page 1) ----
 
 export function parsePersonalInformation(lines: string[]) {
@@ -204,11 +262,7 @@ function splitNarrativeAndRecommendations(block: string): { narrative: string; r
   const splitAt = Math.min(...splitPoints);
   const narrative = block.slice(0, splitAt).replace(/\n/g, " ").trim();
   const recVerbRe = /\b(recommend|monitor|maintain|follow|limit|avoid|check|screen)\w*\b/i;
-  const recommendations = block
-    .slice(splitAt)
-    .replace(/Recommendations\s*:?/i, "")
-    .split(/•|\n/)
-    .map((s) => s.replace(/\s+/g, " ").trim())
+  const recommendations = splitBulletItems(block.slice(splitAt).replace(/Recommendations\s*:?/i, "")).filter((s) => !isHeadingOnly(s)).map(stripTrailingHeading)
     .filter((s) => s.length >= 10 && recVerbRe.test(s));
   return { narrative, recommendations };
 }
@@ -312,10 +366,7 @@ export function parseFoodSensitivityMetabolism(pagesLines: string[][]): FoodSens
     const recIdx = block.search(/Recommendations:/i);
     const narrative = (recIdx >= 0 ? block.slice(0, recIdx) : block).replace(/\n/g, " ").trim();
     const recsBlock = recIdx >= 0 ? block.slice(recIdx + "Recommendations:".length) : "";
-    const recommendations = recsBlock
-      .split("•")
-      .map((s) => s.replace(/\n/g, " ").trim())
-      .filter(Boolean);
+    const recommendations = splitBulletItems(recsBlock).filter((s) => !isHeadingOnly(s)).map(stripTrailingHeading).filter(Boolean);
     const risk_level = findRiskWordNear(block, /risk|intolerance|resistance|sensitivity/i);
     results.push({ name, risk_level, narrative, recommendations });
   }
@@ -378,10 +429,7 @@ export function parseMusculoskeletal(lines: string[]): MusculoskeletalNarrative 
   const narrative = (medRecIdx >= 0 ? afterMatch.slice(0, medRecIdx) : afterMatch.slice(0, 400)).replace(/\n/g, " ").trim();
   const dietIdx = afterMatch.search(/Diet and Nutrition:/i);
   const recsBlock = medRecIdx >= 0 ? afterMatch.slice(medRecIdx + "Medical Recommendations:".length, dietIdx >= 0 ? dietIdx : undefined) : "";
-  const recommendations = recsBlock
-    .split("•")
-    .map((s) => s.replace(/\n/g, " ").trim())
-    .filter(Boolean);
+  const recommendations = splitBulletItems(recsBlock).filter((s) => !isHeadingOnly(s)).map(stripTrailingHeading).filter(Boolean);
   return { condition, risk_level, narrative, recommendations };
 }
 
@@ -420,10 +468,7 @@ export function parseDietPlan(pagesLines: string[][]): { heading: string; recomm
     const start = matches[i].index! + matches[i][0].length;
     const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
     const block = text.slice(start, end);
-    const recommendations = block
-      .split("•")
-      .map((s) => s.replace(/\n/g, " ").trim())
-      .filter(Boolean);
+    const recommendations = splitBulletItems(block).filter((s) => !isHeadingOnly(s)).map(stripTrailingHeading).filter(Boolean);
     sections.push({ heading, recommendations });
   }
   return sections;

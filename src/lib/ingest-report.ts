@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import { extractReportPdf, PdfExtractError } from "@/lib/pdf-extract";
 import { reportDataSchema } from "@/lib/report-schema";
+import { checkReportIntegrity, formatIntegrityIssues } from "@/lib/pdf-extract/integrity";
 
 export class IngestError extends Error {
   status: number;
@@ -55,6 +56,20 @@ export async function ingestReportPdf(pdfBuffer: Buffer, expectedUid?: string): 
   const validation = reportDataSchema.safeParse({ uid, ...data });
   if (!validation.success) {
     throw new IngestError("Extracted data failed validation", 422, validation.error.issues);
+  }
+
+  // Zod has confirmed the shape is right; this confirms the *content* is.
+  // Storing a structurally-valid but garbled report is worse than failing —
+  // it reaches the UI looking authoritative, and the only way anyone finds
+  // out is by noticing it on screen.
+  const integrityIssues = checkReportIntegrity(validation.data);
+  if (integrityIssues.length > 0) {
+    console.error(`[ingest] integrity check failed for uid ${uid}:\n${formatIntegrityIssues(integrityIssues)}`);
+    throw new IngestError(
+      `Extracted data failed content integrity checks (${integrityIssues.length} issue(s)) — report not stored`,
+      422,
+      integrityIssues,
+    );
   }
 
   const validatedData: Record<string, unknown> = { ...validation.data };
