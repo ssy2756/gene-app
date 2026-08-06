@@ -39,8 +39,16 @@ export function HomeScreen({
 }) {
   const { patient, home, carePlan } = report;
   const topConditions = carePlan.slice(0, 3);
-  const firstName = patient.name !== "—" ? patient.name.split(" ")[0] : "there";
-  const initials = patient.name !== "—" ? patient.name.slice(0, 2).toUpperCase() : "—";
+  // The report prints the name with an honorific ("Mr. Abbaya Chowdary
+  // Kothari"), so the first whitespace-delimited word is the title, not the
+  // first name — greeting on it produced "Good morning, Mr." and an avatar
+  // reading "MR". Drop any leading honorific before deriving either.
+  const nameParts = patient.name !== "—" ? patient.name.replace(/^(Mr|Mrs|Ms|Dr|Miss)\.?\s+/i, "").split(/\s+/).filter(Boolean) : [];
+  const firstName = nameParts[0] ?? "there";
+  const initials =
+    nameParts.length > 0
+      ? `${nameParts[0][0]}${nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : ""}`.toUpperCase()
+      : "—";
   const ringGradient = buildRingGradient(home.riskCounts);
 
   return (
