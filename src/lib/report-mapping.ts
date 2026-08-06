@@ -408,7 +408,6 @@ function mapFitness(raw: RawReport): { headline: string; sub: string; tips: stri
   // "exercise" is the current schema field name; "metabolism" is kept as a
   // fallback alias for any report ingested before the rename.
   const exercise = asArray(isRecord(fn) ? (fn.exercise ?? fn.metabolism) : undefined).filter(isRecord);
-  const musculoTips = flattenRecommendations(isRecord(musculo) ? musculo.recommendations : undefined);
   const exerciseTips = exercise.flatMap((m) => {
     const own = flattenRecommendations(m.recommendations);
     if (own.length) return own;
@@ -421,16 +420,18 @@ function mapFitness(raw: RawReport): { headline: string; sub: string; tips: stri
   // "risk_level" only, no dedicated headline field — use the risk_level as
   // a short label for the card title.
   //
-  // The narrative itself (the full "You have homozygous, clinically
-  // significant mutations..." paragraph) is intentionally NOT surfaced as
-  // `sub` here — it's condition-level detail that's already shown on the
-  // Health Risks screen for this same condition, so repeating it under
-  // Lifestyle's "Fitness & exercise" card is redundant, not missing data.
+  // Only the musculoskeletal profile's *label* is used here. Neither its
+  // narrative (the "You have homozygous, clinically significant
+  // mutations..." paragraph) nor its recommendations ("Monitor CBC, serum
+  // BUN...", "Recommend imaging studies of affected joints.") are surfaced:
+  // both are condition-level detail already shown in full on the Health
+  // Risks screen for this same condition. This card is the *exercise*
+  // prescription, so it lists only the exercise tips.
   const risk = str(pick(musculo, ["risk_level", "level"]), "");
   return {
     headline: str(pick(musculo, ["profile", "type"]), risk || "Fitness profile"),
     sub: "",
-    tips: [...musculoTips, ...exerciseTips],
+    tips: exerciseTips,
   };
 }
 
